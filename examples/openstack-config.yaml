@@ -1,0 +1,31 @@
+---
+# OpenStack Configuration for openCenter AirGap Deployment
+#
+# This file contains OpenStack credentials and VM configuration
+# for automated infrastructure provisioning.
+
+# OpenStack Authentication
+auth_url: https://openstack.example.com:5000/v3
+project_name: my-kubernetes-project
+username: my-openstack-user
+password: changeme-secure-password
+region: RegionOne
+domain_name: Default
+
+# VM Configuration
+control_plane_count: 3  # Number of control plane nodes
+worker_count: 2         # Number of worker nodes
+
+# OpenStack Resources
+flavor: m1.large                    # VM flavor (4 vCPU, 8GB RAM recommended)
+image: ubuntu-24.04                 # Ubuntu 24.04 LTS image name
+network: private-network            # Private network name
+floating_ip_pool: public            # Floating IP pool for external access (optional)
+key_pair: my-ssh-keypair            # SSH key pair name for VM access
+
+# Notes:
+# - Ensure the image is Ubuntu 24.04 LTS
+# - Flavor should have at least 2 vCPU and 4GB RAM per node
+# - Network must allow communication between VMs
+# - Key pair must be pre-created in OpenStack
+# - Password should be stored securely (use environment variable or vault)

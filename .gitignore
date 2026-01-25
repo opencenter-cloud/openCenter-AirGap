@@ -7,9 +7,44 @@ dist/
 *.tar.gz
 *.tar.zst
 *.tar.bz2
+*.tar.xz
+*.tgz
 
 # kubespray-offline outputs
 outputs/
+
+# Downloaded assets (keep directory structure, ignore binaries)
+assets/k8s-binaries/*.tar.gz
+assets/k8s-binaries/*.tar.xz
+assets/k8s-binaries/*.tgz
+assets/k8s-binaries/crun-*
+assets/k8s-binaries/files.list
+assets/k8s-binaries/cilium-cli/
+assets/k8s-binaries/gvisor/
+assets/k8s-binaries/kubernetes/
+assets/k8s-binaries/runc/
+assets/k8s-binaries/skopeo/
+assets/k8s-binaries/yq/
+
+# Python wheels (keep index.html, ignore packages)
+assets/python-wheels/**/*.whl
+assets/python-wheels/**/*.tar.gz
+assets/python-wheels/**/dist-info/
+
+# APT repository packages
+assets/repos/apt/**/pkgs/
+assets/repos/apt/**/Packages*
+assets/repos/apt/**/Sources*
+assets/repos/apt/**/Contents*
+assets/repos/apt/**/Release*
+
+# Kubespray clone
+assets/kubespray/kubespray-master/.git/
+assets/kubespray/kubespray-master/**/*.pyc
+
+# Terraform providers
+assets/terraform/.terraform/
+assets/terraform-mirror/**/terraform-provider-*
 
 # Terraform
 .terraform/

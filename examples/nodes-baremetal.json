@@ -1,0 +1,30 @@
+{
+  "control_plane": [
+    {
+      "hostname": "control-01",
+      "ip": "192.168.1.10"
+    },
+    {
+      "hostname": "control-02",
+      "ip": "192.168.1.11"
+    },
+    {
+      "hostname": "control-03",
+      "ip": "192.168.1.12"
+    }
+  ],
+  "workers": [
+    {
+      "hostname": "worker-01",
+      "ip": "192.168.1.20"
+    },
+    {
+      "hostname": "worker-02",
+      "ip": "192.168.1.21"
+    },
+    {
+      "hostname": "worker-03",
+      "ip": "192.168.1.22"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+---
+# Example node list for bare-metal Kubernetes deployment
+# This file defines the cluster topology for Kubespray
+
+control_plane:
+  - hostname: control-01
+    ip: 192.168.1.10
+  - hostname: control-02
+    ip: 192.168.1.11
+  - hostname: control-03
+    ip: 192.168.1.12
+
+workers:
+  - hostname: worker-01
+    ip: 192.168.1.20
+  - hostname: worker-02
+    ip: 192.168.1.21
+  - hostname: worker-03
+    ip: 192.168.1.22
+
+# Optional: Dedicated etcd nodes (if not using control plane for etcd)
+# etcd:
+#   - hostname: etcd-01
+#     ip: 192.168.1.30
+
+# Optional: Custom SSH port
+# workers:
+#   - hostname: worker-04
+#     ip: 192.168.1.23
+#     ssh_port: 2222
+
+# Optional: Jump host configuration (ansible_host different from cluster IP)
+# workers:
+#   - hostname: worker-05
+#     ip: 192.168.1.24
+#     ansible_host: 10.0.0.100  # SSH via jump host
