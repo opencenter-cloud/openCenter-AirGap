@@ -1,0 +1,64 @@
+# openCenter AirGap .gitignore
+
+# Build artifacts
+build/
+dist/
+*.tar
+*.tar.gz
+*.tar.zst
+*.tar.bz2
+
+# kubespray-offline outputs
+outputs/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.key
+*.pem
+*.crt
+secrets/
+credentials/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Zarf
+zarf-sbom/
+zarf-package-*.tar.zst
+checksums.txt
