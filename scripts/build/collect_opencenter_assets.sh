@@ -10,6 +10,8 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # Source version configuration
 source "${PROJECT_ROOT}/config/versions.env"
 
+# Options
+ALL_TAGS="${ALL_TAGS:-true}"  # Set to false to only pull latest tags
 # Output directories
 GITOPS_BASE_DIR="${PROJECT_ROOT}/assets/gitops-base"
 IMAGES_DIR="${PROJECT_ROOT}/build/opencenter-images"
@@ -127,7 +129,7 @@ fetch_opencenter_images() {
         echo "  - ${pkg}"
     done
     
-    # Create image list with latest tags
+    # Create image list with all tags
     mkdir -p "$(dirname "${IMAGE_LIST}")"
     > "${IMAGE_LIST}"
     
@@ -139,15 +141,34 @@ fetch_opencenter_images() {
                         -H "Accept: application/vnd.github+json" \
                         "${VERSIONS_URL}")
         
-        # Get the latest version tag
-        LATEST_TAG=$(echo "${VERSIONS}" | jq -r '.[0].metadata.container.tags[0]' 2>/dev/null || echo "latest")
+        # Get all tags for all versions (not just latest)
         
-        if [ "${LATEST_TAG}" != "null" ] && [ -n "${LATEST_TAG}" ]; then
-            IMAGE="${OPENCENTER_CONTAINER_REGISTRY}/${package}:${LATEST_TAG}"
-            echo "${IMAGE}" >> "${IMAGE_LIST}"
-            log_info "Added: ${IMAGE}"
+        # Check if we should get all tags or just latest
+        if [ "${ALL_TAGS}" = "false" ]; then
+            TAGS=$(echo "${VERSIONS}" | jq -r '.[0].metadata.container.tags[0]' 2>/dev/null)
+            log_info "Fetching latest tag only for ${package}"
+        else
+            log_info "Fetching all tags for ${package}"
         fi
+        TAGS=$(echo "${VERSIONS}" | jq -r '.[].metadata.container.tags[]?' 2>/dev/null)
+        
+        if [ -z "${TAGS}" ]; then
+            log_warn "No tags found for ${package}, using 'latest'"
+            TAGS="latest"
+        fi
+        
+        # Add all unique tags
+        echo "${TAGS}" | sort -u | while read -r tag; do
+            if [ "${tag}" != "null" ] && [ -n "${tag}" ]; then
+                IMAGE="${OPENCENTER_CONTAINER_REGISTRY}/${package}:${tag}"
+                echo "${IMAGE}" >> "${IMAGE_LIST}"
+                log_info "Added: ${IMAGE}"
+            fi
+        done
     done
+    
+    # Remove duplicates and sort
+    sort -u "${IMAGE_LIST}" -o "${IMAGE_LIST}"
     
     log_info "Image list saved to: ${IMAGE_LIST}"
 }
