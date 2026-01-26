@@ -98,14 +98,18 @@ python3.12 -m venv venv
 source venv/bin/activate
 pip install pyyaml jinja2 requests
 
-# 3. Clone kubespray-offline
+# 3. Setup GitHub token for openCenter assets
+./scripts/build/setup_github_token.sh
+# Follow interactive prompts to create and validate token
+
+# 4. Clone kubespray-offline
 git clone -b main https://github.com/tmurakam/kubespray-offline.git build/kubespray-offline
 
-# 4. Configure versions (optional - defaults are production-ready)
+# 5. Configure versions (optional - defaults are production-ready)
 # Edit build/kubespray-offline/target-scripts/config.sh
 # Edit build/kubespray-offline/imagelists/additional_images.txt
 
-# 5. Run build (30-60 minutes)
+# 6. Run build (30-60 minutes)
 ./scripts/build/build.sh
 
 # Output: dist/zarf-package-openCenter-airgap-amd64-1.0.0.tar.zst
@@ -337,16 +341,29 @@ EOF
 
 ## Documentation
 
-| Document | Purpose |
-|:---------|:--------|
-| [Build Runbook](docs/build-runbook.md) | Step-by-step build instructions |
-| [Deployment Runbook (Bare-metal)](docs/deployment-runbook-baremetal.md) | Bare-metal deployment guide |
-| [Deployment Runbook (OpenStack)](docs/deployment-runbook-openstack.md) | OpenStack deployment guide |
-| [Cleanup Guide](docs/cleanup-guide.md) | Reclaim disk space by removing build artifacts |
-| [Troubleshooting Guide](docs/troubleshooting-guide.md) | Common issues and solutions |
-| [Extension Guide](docs/extension-guide.md) | Adding services and updating versions |
-| [Design Document](docs/design-document.md) | Architecture and design decisions |
-| [Product Requirements](docs/product-requirements.md) | Requirements and acceptance criteria |
+Documentation organized by purpose using the [Diátaxis framework](docs/taxonomy.md).
+
+**New to openCenter?** Start with the [First Deployment Tutorial](docs/tutorials/01-first-deployment.md).
+
+### By Purpose
+
+**Learning (Tutorials)**
+- [First Deployment](docs/tutorials/01-first-deployment.md) - Deploy your first cluster in 30 minutes
+
+**Problem-Solving (How-To Guides)**
+- [Build Air-Gap Package](docs/how-to/build/build-air-gap-package.md)
+- [Deploy Bare-Metal Cluster](docs/how-to/deploy/deploy-baremetal-cluster.md)
+- [Verify Cluster Health](docs/how-to/verify/verify-cluster-health.md)
+
+**Reference (Lookup)**
+- [Zarf Variables](docs/reference/configuration/zarf-variables.md)
+- [Service Endpoints](docs/reference/architecture/service-endpoints.md)
+
+**Understanding (Explanations)**
+- [Three-Zone Model](docs/explanation/architecture/three-zone-model.md)
+- [Why Zarf](docs/explanation/design-decisions/why-zarf.md)
+
+**Full documentation index**: [docs/README.md](docs/README.md)
 
 ## Troubleshooting
 
