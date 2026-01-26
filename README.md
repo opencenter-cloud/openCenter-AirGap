@@ -342,6 +342,7 @@ EOF
 | [Build Runbook](docs/build-runbook.md) | Step-by-step build instructions |
 | [Deployment Runbook (Bare-metal)](docs/deployment-runbook-baremetal.md) | Bare-metal deployment guide |
 | [Deployment Runbook (OpenStack)](docs/deployment-runbook-openstack.md) | OpenStack deployment guide |
+| [Cleanup Guide](docs/cleanup-guide.md) | Reclaim disk space by removing build artifacts |
 | [Troubleshooting Guide](docs/troubleshooting-guide.md) | Common issues and solutions |
 | [Extension Guide](docs/extension-guide.md) | Adding services and updating versions |
 | [Design Document](docs/design-document.md) | Architecture and design decisions |
@@ -367,6 +368,15 @@ bash -x download-all.sh
 du -sh build/kubespray-offline/outputs/*
 
 # Remove unnecessary images from additional_images.txt
+```
+
+**Disk space exhausted during build**:
+```bash
+# Clean build artifacts
+./scripts/cleanup.sh --build --assets
+
+# Check available space (need 100GB+)
+df -h /opt
 ```
 
 ### Deployment Issues
