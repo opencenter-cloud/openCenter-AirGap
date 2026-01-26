@@ -1,7 +1,9 @@
 # openCenter AirGap .gitignore
 
-# Build artifacts
-/build/
+# Build artifacts (ignore build output directory, not scripts/build/)
+/build/kubespray-offline/
+/build/*.tar.gz
+/build/*.log
 dist/
 *.tar
 *.tar.gz
@@ -61,6 +63,7 @@ __pycache__/
 .Python
 venv/
 env/
+.env
 ENV/
 .venv
 

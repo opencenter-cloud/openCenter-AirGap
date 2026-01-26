@@ -1,0 +1,45 @@
+URL,Category,Port,Protocol,Required,Description
+registry.k8s.io,Container Registry,443,HTTPS,Yes,Kubernetes official registry
+k8s.gcr.io,Container Registry,443,HTTPS,Yes,Kubernetes GCR mirror
+gcr.io,Container Registry,443,HTTPS,Yes,Google Container Registry
+ghcr.io,Container Registry,443,HTTPS,Yes,GitHub Container Registry
+docker.io,Container Registry,443,HTTPS,Yes,Docker Hub
+registry-1.docker.io,Container Registry,443,HTTPS,Yes,Docker Hub registry
+index.docker.io,Container Registry,443,HTTPS,Yes,Docker Hub index
+auth.docker.io,Container Registry,443,HTTPS,Yes,Docker Hub authentication
+production.cloudflare.docker.com,Container Registry,443,HTTPS,Yes,Docker Hub CDN
+quay.io,Container Registry,443,HTTPS,Yes,Red Hat Quay registry
+grafana.com,Container Registry,443,HTTPS,Yes,Grafana registry
+docker.grafana.com,Container Registry,443,HTTPS,Yes,Grafana Docker registry
+goharbor.io,Container Registry,443,HTTPS,Yes,Harbor registry
+bitnami.com,Container Registry,443,HTTPS,Yes,Bitnami registry
+registry.opensource.zalan.do,Container Registry,443,HTTPS,Yes,Zalando registry
+github.com,Git Repository,443,HTTPS,Yes,GitHub main site
+api.github.com,Git Repository,443,HTTPS,Yes,GitHub API
+raw.githubusercontent.com,Git Repository,443,HTTPS,Yes,GitHub raw content
+codeload.github.com,Git Repository,443,HTTPS,Yes,GitHub code downloads
+github.com,Git Repository,9418,Git,No,Git protocol (optional)
+dl.k8s.io,Kubernetes Binary,443,HTTPS,Yes,Kubernetes binary downloads
+storage.googleapis.com,Kubernetes Binary,443,HTTPS,Yes,Google Cloud Storage
+pypi.org,Python Package,443,HTTPS,Yes,Python Package Index
+pypi.python.org,Python Package,443,HTTPS,Yes,PyPI mirror
+files.pythonhosted.org,Python Package,443,HTTPS,Yes,PyPI file hosting
+archive.ubuntu.com,System Package,80,HTTP,Yes,Ubuntu package archive
+archive.ubuntu.com,System Package,443,HTTPS,Yes,Ubuntu package archive
+security.ubuntu.com,System Package,80,HTTP,Yes,Ubuntu security updates
+security.ubuntu.com,System Package,443,HTTPS,Yes,Ubuntu security updates
+ports.ubuntu.com,System Package,80,HTTP,No,Ubuntu ports archive
+us.archive.ubuntu.com,System Package,80,HTTP,No,Ubuntu US mirror
+mirror.ubuntu.com,System Package,80,HTTP,No,Ubuntu mirror
+releases.hashicorp.com,Terraform,443,HTTPS,Yes,HashiCorp releases
+registry.terraform.io,Terraform,443,HTTPS,Yes,Terraform registry
+checkpoint-api.hashicorp.com,Terraform,443,HTTPS,No,Terraform checkpoint API
+get.zarf.dev,Zarf,443,HTTPS,Yes,Zarf installation
+cloudflare.com,CDN,443,HTTPS,No,Cloudflare CDN
+fastly.com,CDN,443,HTTPS,No,Fastly CDN
+akamai.com,CDN,443,HTTPS,No,Akamai CDN
+googleapis.com,CDN,443,HTTPS,Yes,Google APIs
+letsencrypt.org,Certificate,443,HTTPS,No,Let's Encrypt CA
+ocsp.digicert.com,Certificate,80,HTTP,No,DigiCert OCSP
+ocsp.sectigo.com,Certificate,80,HTTP,No,Sectigo OCSP
+ocsp.godaddy.com,Certificate,80,HTTP,No,GoDaddy OCSP

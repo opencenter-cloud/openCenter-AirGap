@@ -17,6 +17,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/logging.sh"
 
+# Source network monitor module
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/network_monitor.sh"
+
 # Default configuration
 DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-baremetal}"
 BASTION_IP="${BASTION_IP:-}"
@@ -28,6 +32,7 @@ OPENSTACK_CONFIG="${OPENSTACK_CONFIG:-}"
 SKIP_INVENTORY="${SKIP_INVENTORY:-false}"
 SKIP_OFFLINE_CONFIG="${SKIP_OFFLINE_CONFIG:-false}"
 SKIP_CLUSTER_DEPLOY="${SKIP_CLUSTER_DEPLOY:-false}"
+ENABLE_NETWORK_MONITOR="${ENABLE_NETWORK_MONITOR:-true}"
 
 # Colors for output (for visual display, logging module handles file logging)
 RED='\033[0;31m'
@@ -80,6 +85,7 @@ Common Options:
   --skip-inventory             Skip inventory generation
   --skip-offline-config        Skip offline repository configuration
   --skip-cluster-deploy        Skip Kubernetes cluster deployment
+  --disable-network-monitor    Disable network connection monitoring
   --help                       Show this help message
 
 Environment Variables:
@@ -145,6 +151,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_CLUSTER_DEPLOY="true"
             shift
             ;;
+        --disable-network-monitor)
+            ENABLE_NETWORK_MONITOR="false"
+            shift
+            ;;
         --help)
             usage
             exit 0
@@ -182,6 +192,57 @@ fi
 
 # Initialize logging system
 init_logging
+
+# Start network monitoring if enabled
+if [ "${ENABLE_NETWORK_MONITOR}" = "true" ]; then
+    log_info "Network monitoring enabled for air-gap compliance validation"
+    export MONITOR_LOG_DIR="${LOG_DIR}"
+    export BASTION_IP="${BASTION_IP}"
+    
+    # Ensure tcpdump is installed
+    if ! command -v tcpdump &> /dev/null; then
+        log_warn "tcpdump not found. Installing..."
+        if command -v apt-get &> /dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y tcpdump
+        else
+            log_error "Cannot install tcpdump automatically. Please install manually."
+            log_error "Network monitoring will be disabled."
+            ENABLE_NETWORK_MONITOR="false"
+        fi
+    fi
+    
+    if [ "${ENABLE_NETWORK_MONITOR}" = "true" ]; then
+        start_monitor || {
+            log_warn "Failed to start network monitor. Continuing without monitoring."
+            ENABLE_NETWORK_MONITOR="false"
+        }
+    fi
+else
+    log_info "Network monitoring disabled"
+fi
+
+# Trap to ensure network monitor is stopped on exit
+cleanup_on_exit() {
+    local exit_code=$?
+    
+    if [ "${ENABLE_NETWORK_MONITOR}" = "true" ]; then
+        log_info "Stopping network monitor..."
+        stop_monitor || true
+        
+        log_info "Analyzing network connections..."
+        if analyze_logs; then
+            log_info "✓ Air-gap compliance verified: No external connections detected"
+        else
+            log_error "✗ Air-gap compliance violation: External connections detected"
+            log_error "Review network monitor logs at: ${MONITOR_LOG_DIR}/network-monitor.log"
+            exit_code=1
+        fi
+    fi
+    
+    exit ${exit_code}
+}
+
+trap cleanup_on_exit EXIT INT TERM
 
 # Display configuration
 log_phase "openCenter AirGap Deployment"

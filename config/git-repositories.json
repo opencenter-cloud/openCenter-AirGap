@@ -1,0 +1,140 @@
+{
+  "name": "openCenter AirGap Git Repositories",
+  "version": "1.0.0",
+  "description": "Git repositories required for building openCenter AirGap package",
+  "last_updated": "2026-01-26",
+  "repositories": [
+    {
+      "name": "Kubespray",
+      "url": "https://github.com/kubernetes-sigs/kubespray",
+      "clone_url": "https://github.com/kubernetes-sigs/kubespray.git",
+      "branch": "master",
+      "purpose": "Kubernetes cluster deployment via Ansible",
+      "required": true,
+      "clone_to": "build/kubespray-offline/kubespray-master/",
+      "notes": "Cloned automatically by kubespray-offline"
+    },
+    {
+      "name": "kubespray-offline",
+      "url": "https://github.com/kubespray-offline/kubespray-offline",
+      "clone_url": "https://github.com/kubespray-offline/kubespray-offline.git",
+      "branch": "main",
+      "purpose": "Offline asset collection for Kubespray",
+      "required": true,
+      "clone_to": "build/kubespray-offline/",
+      "notes": "Core tool for asset discovery and download"
+    },
+    {
+      "name": "Genestack (gitops-base)",
+      "url": "https://github.com/rackerlabs/genestack",
+      "clone_url": "https://github.com/rackerlabs/genestack.git",
+      "branch": "main",
+      "purpose": "openCenter platform service definitions",
+      "required": true,
+      "clone_to": "assets/gitops-base/",
+      "notes": "Contains 20+ platform service manifests"
+    },
+    {
+      "name": "RMPK Environments",
+      "url": "https://github.com/rpc-environments/",
+      "clone_url": "https://github.com/rpc-environments/",
+      "branch": "main",
+      "purpose": "RMPK environment configurations",
+      "required": true,
+      "clone_to": "assets/rmpk-environments/",
+      "notes": "Environment-specific configurations for RMPK"
+    },
+    {
+      "name": "Zarf",
+      "url": "https://github.com/defenseunicorns/zarf",
+      "clone_url": "https://github.com/defenseunicorns/zarf.git",
+      "branch": "main",
+      "purpose": "Air-gap packaging framework",
+      "required": false,
+      "clone_to": null,
+      "notes": "Usually installed as binary, not cloned"
+    }
+  ],
+  "binary_releases": [
+    {
+      "name": "CNI Plugins",
+      "url": "https://github.com/containernetworking/plugins/releases",
+      "purpose": "Container Network Interface plugins",
+      "required": true,
+      "downloaded_by": "kubespray-offline"
+    },
+    {
+      "name": "etcd",
+      "url": "https://github.com/etcd-io/etcd/releases",
+      "purpose": "Distributed key-value store for Kubernetes",
+      "required": true,
+      "downloaded_by": "kubespray-offline"
+    },
+    {
+      "name": "Helm",
+      "url": "https://github.com/helm/helm/releases",
+      "purpose": "Kubernetes package manager",
+      "required": true,
+      "downloaded_by": "kubespray-offline"
+    },
+    {
+      "name": "Zarf",
+      "url": "https://github.com/defenseunicorns/zarf/releases",
+      "purpose": "Air-gap packaging tool",
+      "required": true,
+      "downloaded_by": "manual"
+    }
+  ],
+  "git_hosting": {
+    "domains": [
+      "github.com",
+      "api.github.com",
+      "raw.githubusercontent.com",
+      "codeload.github.com"
+    ],
+    "ports": {
+      "https": 443,
+      "git": 9418
+    },
+    "protocols": [
+      "https",
+      "git"
+    ],
+    "recommended_protocol": "https"
+  },
+  "clone_commands": {
+    "kubespray-offline": "git clone -b main https://github.com/kubespray-offline/kubespray-offline.git build/kubespray-offline",
+    "gitops-base": "git clone -b main https://github.com/rackerlabs/genestack.git assets/gitops-base",
+    "kubespray": "# Cloned automatically by kubespray-offline during build"
+  },
+  "firewall_requirements": {
+    "domains": [
+      "github.com",
+      "api.github.com",
+      "raw.githubusercontent.com",
+      "codeload.github.com"
+    ],
+    "ports": [
+      {
+        "port": 443,
+        "protocol": "TCP",
+        "service": "HTTPS",
+        "required": true
+      },
+      {
+        "port": 9418,
+        "protocol": "TCP",
+        "service": "Git",
+        "required": false,
+        "notes": "Only if using git:// protocol instead of https://"
+      }
+    ]
+  },
+  "notes": [
+    "All repositories should be cloned using HTTPS protocol for security",
+    "Git protocol (port 9418) is optional and not recommended",
+    "kubespray-offline automatically clones Kubespray during build",
+    "gitops-base must be cloned manually before running build",
+    "Binary releases are downloaded via GitHub Releases API (HTTPS)"
+  ]
+}

@@ -11,7 +11,11 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 source "${PROJECT_ROOT}/config/versions.env"
 
 # Options
+<<<<<<< HEAD
 ALL_TAGS="${ALL_TAGS:-true}"  # Set to false to only pull latest tags
+=======
+ALL_TAGS="${ALL_TAGS:-false}"  # Set to true to pull all version tags (slow, may hit rate limits)
+>>>>>>> c44a6e4 (feat: implement build determinism validation and complete image list generation)
 # Output directories
 GITOPS_BASE_DIR="${PROJECT_ROOT}/assets/gitops-base"
 IMAGES_DIR="${PROJECT_ROOT}/build/opencenter-images"
@@ -117,15 +121,15 @@ fetch_opencenter_images() {
     fi
     
     # Extract package names
-    PACKAGE_NAMES=$(echo "${PACKAGES}" | jq -r '.[].name')
+    mapfile -t PACKAGE_ARRAY < <(echo "${PACKAGES}" | jq -r '.[].name')
     
-    if [ -z "${PACKAGE_NAMES}" ]; then
+    if [ ${#PACKAGE_ARRAY[@]} -eq 0 ]; then
         log_warn "No packages found in opencenter-cloud organization"
         return
     fi
     
     log_info "Found packages:"
-    echo "${PACKAGE_NAMES}" | while read -r pkg; do
+    for pkg in "${PACKAGE_ARRAY[@]}"; do
         echo "  - ${pkg}"
     done
     
@@ -133,7 +137,11 @@ fetch_opencenter_images() {
     mkdir -p "$(dirname "${IMAGE_LIST}")"
     > "${IMAGE_LIST}"
     
-    echo "${PACKAGE_NAMES}" | while read -r package; do
+    for package in "${PACKAGE_ARRAY[@]}"; do
+        [ -z "${package}" ] && continue
+        
+        log_info "Processing package: ${package}"
+        
         # Fetch versions for each package
         VERSIONS_URL="https://api.github.com/orgs/opencenter-cloud/packages/container/${package}/versions"
         
@@ -141,13 +149,17 @@ fetch_opencenter_images() {
                         -H "Accept: application/vnd.github+json" \
                         "${VERSIONS_URL}")
         
+<<<<<<< HEAD
         # Get all tags for all versions (not just latest)
         
+=======
+>>>>>>> c44a6e4 (feat: implement build determinism validation and complete image list generation)
         # Check if we should get all tags or just latest
         if [ "${ALL_TAGS}" = "false" ]; then
             TAGS=$(echo "${VERSIONS}" | jq -r '.[0].metadata.container.tags[0]' 2>/dev/null)
             log_info "Fetching latest tag only for ${package}"
         else
+<<<<<<< HEAD
             log_info "Fetching all tags for ${package}"
         fi
         TAGS=$(echo "${VERSIONS}" | jq -r '.[].metadata.container.tags[]?' 2>/dev/null)
@@ -159,6 +171,22 @@ fetch_opencenter_images() {
         
         # Add all unique tags
         echo "${TAGS}" | sort -u | while read -r tag; do
+=======
+            TAGS=$(echo "${VERSIONS}" | jq -r '.[].metadata.container.tags[]?' 2>/dev/null)
+            log_info "Fetching all tags for ${package}"
+        fi
+        
+        if [ -z "${TAGS}" ] || [ "${TAGS}" = "null" ]; then
+            log_warn "No tags found for ${package}, skipping"
+            continue
+        fi
+        
+        # Add all unique tags
+        mapfile -t TAG_ARRAY < <(echo "${TAGS}" | sort -u)
+        log_info "Found ${#TAG_ARRAY[@]} tag(s) for ${package}"
+        
+        for tag in "${TAG_ARRAY[@]}"; do
+>>>>>>> c44a6e4 (feat: implement build determinism validation and complete image list generation)
             if [ "${tag}" != "null" ] && [ -n "${tag}" ]; then
                 IMAGE="${OPENCENTER_CONTAINER_REGISTRY}/${package}:${tag}"
                 echo "${IMAGE}" >> "${IMAGE_LIST}"
@@ -178,8 +206,8 @@ pull_opencenter_images() {
     log_info "Pulling openCenter container images..."
     
     if [ ! -f "${IMAGE_LIST}" ]; then
-        log_error "Image list not found: ${IMAGE_LIST}"
-        exit 1
+        log_warn "Image list not found: ${IMAGE_LIST}, skipping image pull"
+        return 0
     fi
     
     if [ -z "${GITHUB_TOKEN:-}" ]; then
@@ -189,7 +217,10 @@ pull_opencenter_images() {
     
     # Login to GitHub Container Registry
     log_info "Logging in to GitHub Container Registry..."
-    echo "${GITHUB_TOKEN}" | ${CONTAINER_RUNTIME} login ghcr.io -u USERNAME --password-stdin
+    if ! echo "${GITHUB_TOKEN}" | ${CONTAINER_RUNTIME} login ghcr.io -u USERNAME --password-stdin 2>&1 | tee -a "${BUILD_LOG:-/dev/null}"; then
+        log_error "Failed to login to ghcr.io"
+        return 1
+    fi
     
     mkdir -p "${IMAGES_DIR}"
     
@@ -201,7 +232,7 @@ pull_opencenter_images() {
         
         log_info "Pulling: ${image}"
         
-        if ${CONTAINER_RUNTIME} pull "${image}"; then
+        if ${CONTAINER_RUNTIME} pull "${image}" 2>&1 | tee -a "${BUILD_LOG:-/dev/null}"; then
             log_info "Successfully pulled: ${image}"
             
             # Save image as tar.gz
@@ -211,7 +242,7 @@ pull_opencenter_images() {
             log_info "Saving to: ${IMAGE_FILE}"
             ${CONTAINER_RUNTIME} save "${image}" | gzip > "${IMAGE_FILE}"
         else
-            log_error "Failed to pull: ${image}"
+            log_warn "Failed to pull: ${image}, continuing..."
         fi
     done < "${IMAGE_LIST}"
     
@@ -304,8 +335,20 @@ main() {
     
     check_prerequisites
     clone_gitops_base
-    fetch_opencenter_images
-    pull_opencenter_images
+    
+    if fetch_opencenter_images; then
+        log_info "Image list generated successfully"
+    else
+        log_error "Failed to generate image list"
+        return 1
+    fi
+    
+    if pull_opencenter_images; then
+        log_info "Images pulled successfully"
+    else
+        log_warn "Image pull had errors, continuing..."
+    fi
+    
     extract_images_from_manifests
     merge_image_lists
     generate_summary
@@ -314,3 +357,4 @@ main() {
 }
 
 main "$@"
+

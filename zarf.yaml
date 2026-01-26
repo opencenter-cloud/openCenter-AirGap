@@ -1,10 +1,12 @@
 kind: ZarfPackageConfig
 metadata:
-  name: openCenter-airgap
+  name: opencenter-airgap
   description: Air-gapped Kubernetes cluster deployment with Kubespray
   version: 1.0.0
   architecture: amd64
   authors: openCenter Team
+  url: https://github.com/opencenter/opencenter-airgap
+  vendor: openCenter
 variables:
 - name: DEPLOYMENT_MODE
   description: 'Deployment mode: baremetal or openstack'
@@ -12,7 +14,7 @@ variables:
   prompt: false
 - name: BASTION_IP
   description: IP address of bastion host
-  default: null
+  default: ""
   prompt: true
 - name: SSH_USER
   description: SSH user for node access
@@ -31,34 +33,12 @@ variables:
   default: '80'
   prompt: false
 components:
-- name: bastion-setup
-  description: Kubespray-offline outputs and bastion setup scripts
-  required: true
-  files:
-  - source: assets/k8s-binaries/
-    target: '###ZARF_VAR_INSTALL_PATH###/outputs/files/'
-    executable: false
-  - source: assets/python-wheels/
-    target: '###ZARF_VAR_INSTALL_PATH###/outputs/pypi/'
-    executable: false
-  - source: assets/repos/
-    target: '###ZARF_VAR_INSTALL_PATH###/outputs/debs/'
-    executable: false
-  - source: assets/playbook/
-    target: '###ZARF_VAR_INSTALL_PATH###/outputs/playbook/'
-    executable: false
-  - source: assets/target-scripts/
-    target: '###ZARF_VAR_INSTALL_PATH###/outputs/target-scripts/'
-    executable: true
-  actions:
-    onDeploy:
-      after:
-      - cmd: 'cd ###ZARF_VAR_INSTALL_PATH###/outputs && ./target-scripts/setup-all.sh'
-        description: Execute kubespray-offline setup-all.sh to configure bastion services
-        maxRetries: 1
-        maxTotalSeconds: 1800
+# Component 1: bootstrap-tools
+# Dependencies: None
+# Independence: Fully independent, can deploy alone
+# Provides: Python venv, deployment scripts
 - name: bootstrap-tools
-  description: Python environment and deployment scripts (legacy compatibility)
+  description: Python environment and deployment scripts
   required: true
   files:
   - source: assets/python-wheels/
@@ -67,6 +47,18 @@ components:
   - source: assets/target-scripts/
     target: '###ZARF_VAR_INSTALL_PATH###/target-scripts/'
     executable: true
+  actions:
+    onDeploy:
+      after:
+      - cmd: 'python3 -m venv ###ZARF_VAR_INSTALL_PATH###/venv'
+        description: Create Python virtual environment
+      - cmd: '###ZARF_VAR_INSTALL_PATH###/venv/bin/pip install --no-index --find-links=###ZARF_VAR_INSTALL_PATH###/python-wheels/
+          ansible jinja2 netaddr'
+        description: Install Python dependencies
+# Component 2: terraform-providers
+# Dependencies: None
+# Independence: Fully independent, can deploy alone or skip for bare-metal
+# Provides: Terraform provider mirror, .terraformrc config
 - name: terraform-providers
   description: Terraform provider filesystem mirror for OpenStack
   required: false
@@ -74,12 +66,6 @@ components:
   - source: assets/terraform-mirror/
     target: '###ZARF_VAR_INSTALL_PATH###/terraform-mirror/'
     executable: false
-  - source: assets/terraform/
-    target: '###ZARF_VAR_INSTALL_PATH###/terraform/'
-    executable: false
-  - source: scripts/deploy/terraform_openstack.sh
-    target: '###ZARF_VAR_INSTALL_PATH###/scripts/terraform_openstack.sh'
-    executable: true
   actions:
     onDeploy:
       after:
@@ -89,6 +75,10 @@ components:
           disable_checkpoint = true\n\nprovider_installation {\n  filesystem_mirror {\n    path    = \"###ZARF_VAR_INSTALL_PATH###/terraform-mirror\"\
           \n    include = [\"*/*\"]\n  }\n  direct {\n    exclude = [\"*/*\"]\n  }\n}\n\nEOF"
         description: Configure Terraform filesystem mirror
+# Component 3: kubespray-core
+# Dependencies: bootstrap-tools (logical, for Python venv used later by Kubespray)
+# Independence: Can deploy independently (only copies files, no runtime dependency)
+# Provides: Kubespray playbooks, K8s binaries, package repos
 - name: kubespray-core
   description: Kubespray playbooks, K8s binaries, and package repositories
   required: true
@@ -96,6 +86,10 @@ components:
   - source: assets/kubespray/
     target: '###ZARF_VAR_INSTALL_PATH###/kubespray/'
     executable: false
+    excludes:
+    - '**/.git/**'
+    - '**/.github/**'
+    - '**/.gitlab-ci/**'
   - source: assets/k8s-binaries/
     target: '###ZARF_VAR_INSTALL_PATH###/k8s-binaries/'
     executable: false
@@ -105,88 +99,34 @@ components:
   - source: assets/playbook/
     target: '###ZARF_VAR_INSTALL_PATH###/playbook/'
     executable: false
+# Component 4: k8s-images
+# Dependencies: None
+# Independence: Fully independent, can deploy alone (skips if no images)
+# Provides: Local registry, K8s and openCenter service images
 - name: k8s-images
-  description: Container images for Kubernetes and core services
-  required: true
-  images:
-  - docker.io/library/registry:2.8.3
-  - docker.io/library/nginx:1.29.2
-  - registry.k8s.io/kube-apiserver:v1.34.3
-  - registry.k8s.io/kube-controller-manager:v1.34.3
-  - registry.k8s.io/kube-scheduler:v1.34.3
-  - registry.k8s.io/kube-proxy:v1.34.3
-  - registry.k8s.io/pause:3.10
-  - registry.k8s.io/coredns/coredns:v1.11.1
-  - registry.k8s.io/etcd:3.5.15-0
-  - docker.io/calico/cni:v3.29.1
-  - docker.io/calico/node:v3.29.1
-  - docker.io/calico/kube-controllers:v3.29.1
-  - ghcr.io/fluxcd/source-controller:v2.2.0
-  - ghcr.io/fluxcd/kustomize-controller:v2.2.0
-  - ghcr.io/fluxcd/helm-controller:v2.2.0
-  - ghcr.io/fluxcd/notification-controller:v2.2.0
-  - quay.io/jetstack/cert-manager-controller:v1.13.0
-  - quay.io/jetstack/cert-manager-webhook:v1.13.0
-  - quay.io/jetstack/cert-manager-cainjector:v1.13.0
-  - registry.k8s.io/ingress-nginx/controller:v1.9.0
-  - quay.io/keycloak/keycloak:21.1.1
-  - quay.io/prometheus/prometheus:v2.48.0
-  - grafana/grafana:10.2.0
+  description: Container images for Kubernetes and core services (optional until collected)
+  required: false
   actions:
     onDeploy:
-      after:
-      - cmd: 'mkdir -p ###ZARF_VAR_INSTALL_PATH###/outputs/images && cd ###ZARF_VAR_INSTALL_PATH###/outputs/images
-          && for img in $(podman images --format "{{.Repository}}:{{.Tag}}" | grep -v "<none>"); do
-          filename=$(echo $img | sed "s|/|_|g" | sed "s|:|_|g").tar.gz; if [ ! -f "$filename" ]; then
-          podman save $img | gzip > $filename; fi; done'
-        description: Export container images to tar.gz format for kubespray-offline compatibility
-        maxRetries: 1
-        maxTotalSeconds: 600
+      before:
+      - cmd: |
+          if [ -d "###ZARF_VAR_INSTALL_PATH###/images" ] && [ "$(ls -A ###ZARF_VAR_INSTALL_PATH###/images 2>/dev/null)" ]; then
+            podman ps -q -f name=local-registry | grep . || podman run -d -p ###ZARF_VAR_REGISTRY_PORT###:5000 -v /var/lib/registry:/var/lib/registry --restart=always --name local-registry registry:2.8.3
+            ###ZARF_VAR_INSTALL_PATH###/target-scripts/load-push-all-images.sh
+          else
+            echo "No images directory found, skipping image loading"
+          fi
+        description: Load images if available
+# Component 5: deploy-cluster
+# Dependencies: bootstrap-tools (needs target-scripts), kubespray-core (needs playbooks)
+# Independence: Cannot deploy independently, requires prerequisites
+# Provides: Bastion setup orchestration (nginx, registry, Python venv)
 - name: deploy-cluster
   description: Cluster deployment orchestration
-  required: false
-  files:
-  - source: scripts/deploy/deploy.sh
-    target: '###ZARF_VAR_INSTALL_PATH###/scripts/deploy.sh'
-    executable: true
-  - source: scripts/deploy/configure_nodes_offline.sh
-    target: '###ZARF_VAR_INSTALL_PATH###/scripts/configure_nodes_offline.sh'
-    executable: true
-  - source: scripts/deploy/run_offline_repo_playbook.sh
-    target: '###ZARF_VAR_INSTALL_PATH###/scripts/run_offline_repo_playbook.sh'
-    executable: true
-  - source: scripts/deploy/generate_inventory_baremetal.py
-    target: '###ZARF_VAR_INSTALL_PATH###/scripts/generate_inventory_baremetal.py'
-    executable: true
-  - source: scripts/deploy/generate_offline_yml.py
-    target: '###ZARF_VAR_INSTALL_PATH###/scripts/generate_offline_yml.py'
-    executable: true
+  required: true
   actions:
     onDeploy:
       after:
-      - cmd: 'echo "╔════════════════════════════════════════════════════════════════════════════╗"'
-        description: Display deployment banner
-      - cmd: 'echo "║  openCenter AirGap - Cluster Deployment                                   ║"'
-        description: Display deployment banner
-      - cmd: 'echo "╚════════════════════════════════════════════════════════════════════════════╝"'
-        description: Display deployment banner
-      - cmd: 'echo ""'
-      - cmd: 'echo "Deployment scripts are ready. Choose your deployment method:"'
-        description: Display deployment instructions
-      - cmd: 'echo ""'
-      - cmd: 'echo "Option 1: Automated deployment (recommended)"'
-      - cmd: 'echo "  ###ZARF_VAR_INSTALL_PATH###/scripts/deploy.sh --mode baremetal --bastion-ip ###ZARF_VAR_BASTION_IP### --nodes <nodes.yaml>"'
-        description: Show automated deployment command
-      - cmd: 'echo ""'
-      - cmd: 'echo "Option 2: Manual step-by-step deployment"'
-      - cmd: 'echo "  1. Generate inventory:"'
-      - cmd: 'echo "     python3 ###ZARF_VAR_INSTALL_PATH###/scripts/generate_inventory_baremetal.py --nodes <nodes.yaml> --bastion-ip ###ZARF_VAR_BASTION_IP### --output-dir ###ZARF_VAR_INSTALL_PATH###/kubespray/inventory"'
-        description: Show inventory generation command
-      - cmd: 'echo "  2. Configure nodes:"'
-      - cmd: 'echo "     ###ZARF_VAR_INSTALL_PATH###/scripts/configure_nodes_offline.sh --bastion-ip ###ZARF_VAR_BASTION_IP###"'
-        description: Show offline configuration command
-      - cmd: 'echo "  3. Deploy cluster:"'
-      - cmd: 'echo "     cd ###ZARF_VAR_INSTALL_PATH###/outputs/kubespray-master && ansible-playbook -i ###ZARF_VAR_INSTALL_PATH###/kubespray/inventory/mycluster/hosts.yaml --become cluster.yml"'
-        description: Show cluster deployment command
-      - cmd: 'echo ""'
-      - cmd: 'echo "For help: ###ZARF_VAR_INSTALL_PATH###/scripts/deploy.sh --help"'
+      - cmd: '###ZARF_VAR_INSTALL_PATH###/target-scripts/setup-all.sh'
+        description: Setup bastion services (nginx, registry, Python)
+        dir: '###ZARF_VAR_INSTALL_PATH###'

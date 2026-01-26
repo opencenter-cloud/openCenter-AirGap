@@ -9,7 +9,27 @@ The architecture separates concerns into three logical zones:
 - **Airlock Zone (Zone B)**: Secure transport layer for artifact delivery
 - **Field Zone (Zone C)**: Disconnected deployment environment with bastion-as-hub topology
 
-The core innovation is treating internet isolation as the baseline constraint. A single Zarf package delivered to a bastion host contains the intelligence to provision infrastructure (optional), bootstrap Kubernetes, and deploy core services without any outbound network traffic.
+The core innovation is treating internet isolation as the baseline constraint. A single Zarf package delivered to a bastion host contains all required container images and dependencies, making them available via a local registry for the openCenter platform to consume.
+
+**Scope and Responsibilities:**
+
+openCenter AirGap is responsible for:
+1. ✅ Collecting all Kubernetes cluster dependencies (kubespray-offline)
+2. ✅ Collecting openCenter platform service container images (20+ services)
+3. ✅ Packaging everything into a single Zarf artifact
+4. ✅ Deploying bastion services (registry on port 35000, nginx on port 80)
+5. ✅ Pushing all images to bastion registry
+6. ✅ Verifying bastion services and image availability
+
+openCenter Platform (gitops-base) is responsible for:
+1. ⏭️ Provisioning infrastructure (Terraform for OpenStack, or bare-metal inventory)
+2. ⏭️ Bootstrapping Kubernetes cluster (Kubespray with offline.yml)
+3. ⏭️ Deploying CNI (Calico, Cilium, Kube-OVN via Helm)
+4. ⏭️ Deploying Gitea (in-cluster Git server)
+5. ⏭️ Installing FluxCD (GitOps controllers)
+6. ⏭️ Deploying 20+ core services via Flux CD (cert-manager, ingress-nginx, Gateway API, Keycloak, Prometheus, Grafana, Loki, Tempo, OpenTelemetry, Longhorn, vSphere CSI, OpenStack CSI, Kyverno, OLM, RBAC Manager, Velero, Harbor, Headlamp, Weave GitOps, MetalLB, Sealed Secrets, Postgres Operator, Strimzi Kafka)
+7. ⏭️ Configuring GitOps workflows
+8. ⏭️ Service health monitoring and management
 
 **Key Design Decisions:**
 - Single artifact delivery eliminates "forgotten file" errors
@@ -17,7 +37,7 @@ The core innovation is treating internet isolation as the baseline constraint. A
 - Zarf provides industrial packaging with SBOM and cryptographic signing
 - **Leverage kubespray-offline for asset collection** (images, binaries, packages)
 - Zarf replaces Harbor (registry) and optionally Nginx (file serving)
-- GitOps-native with FluxCD and internal Gitea for day-2 operations
+- **Clear separation**: AirGap provides infrastructure, openCenter provides platform services
 - **Python 3.12+ required** for build scripts with venv at project root
 
 ## Development Environment
@@ -123,36 +143,33 @@ sequenceDiagram
     participant Bastion
     participant Zarf
     participant Registry
-    participant Terraform
-    participant Kubespray
-    participant Nodes
-    participant Flux
+    participant Nginx
+    participant openCenter
 
     Operator->>Bastion: Deploy package
     Bastion->>Zarf: Extract & verify
-    Zarf->>Bastion: Setup Python venv
-    Zarf->>Registry: Start container (port 5000)
+    Zarf->>Bastion: Setup containerd
+    Zarf->>Registry: Start container (port 35000)
+    Zarf->>Nginx: Start container (port 80)
     Zarf->>Registry: Push K8s images
+    Zarf->>Registry: Push openCenter images (20+ services)
+    Zarf->>Bastion: Verify services
     
-    alt OpenStack Mode
-        Zarf->>Terraform: Init with filesystem mirror
-        Terraform->>Nodes: Provision VMs
-        Terraform->>Zarf: Generate inventory
-    else Bare-metal Mode
-        Operator->>Zarf: Provide inventory
-    end
+    Note over Zarf,Bastion: openCenter AirGap scope ends here
+    Note over openCenter: openCenter Platform takes over
     
-    Zarf->>Kubespray: Execute cluster.yml
-    Kubespray->>Bastion: Fetch binaries
-    Kubespray->>Nodes: Install K8s components
-    Nodes->>Registry: Pull images
-    Kubespray->>Zarf: Cluster ready
-    
-    Zarf->>Nodes: Deploy Gitea
-    Zarf->>Nodes: Push manifests to Gitea
-    Zarf->>Nodes: Install FluxCD
-    Flux->>Nodes: Deploy core services
+    openCenter->>Bastion: Provision infrastructure (Terraform/inventory)
+    openCenter->>Bastion: Bootstrap cluster (Kubespray)
+    openCenter->>Registry: Pull K8s images
+    openCenter->>Registry: Pull openCenter images
+    openCenter->>openCenter: Deploy Gitea, FluxCD, 20+ services
 ```
+
+**Handoff Point:** After bastion setup completes, openCenter AirGap hands off to the openCenter platform with:
+- ✅ Bastion registry running on port 35000 with all images (K8s + openCenter services)
+- ✅ Bastion nginx running on port 80 serving binaries, packages, and wheels
+- ✅ All images verified and pullable from registry
+- ⏭️ openCenter platform provisions infrastructure, bootstraps cluster, and deploys services
 
 ## Components and Interfaces
 
@@ -161,51 +178,40 @@ sequenceDiagram
 **Purpose:** Identify and catalog all dependencies required for offline deployment.
 
 **Inputs:**
-- Kubespray version and configuration
+- Kubespray version and configuration (via kubespray-offline)
 - Kubernetes target version
-- Terraform provider requirements (OpenStack mode)
-- Core services versions (FluxCD, Gitea, cert-manager, etc.)
+- openCenter platform services image list (20+ services)
 
 **Outputs:**
-- List of container images with tags
+- List of Kubernetes container images with tags
+- List of openCenter platform service images with tags (FluxCD, Gitea, cert-manager, ingress-nginx, Gateway API, Keycloak, Prometheus, Grafana, Loki, Tempo, OpenTelemetry, Mimir, Longhorn, vSphere CSI, OpenStack CSI, Kyverno, OLM, RBAC Manager, Velero, Harbor, Headlamp, Weave GitOps, MetalLB, Sealed Secrets, Postgres Operator, Strimzi Kafka)
 - List of Kubernetes binaries with versions
 - List of Python packages with versions
 - List of system packages with versions
-- List of Terraform providers with versions
 
 **Key Algorithms:**
 
 ```python
-# Pseudocode for Kubespray asset discovery
-function discover_kubespray_assets(kubespray_version, k8s_version):
-    context = {
-        "kube_version": k8s_version,
-        "image_arch": "amd64",
-        "kube_image_repo": "registry.k8s.io"
-    }
+# Pseudocode for kubespray-offline integration
+function collect_assets_via_kubespray_offline():
+    # kubespray-offline handles asset discovery
+    execute("./download-all.sh")
     
-    # Load Kubespray defaults
-    defaults = load_yaml("kubespray/roles/download/defaults/main.yml")
+    # Outputs are in outputs/ directory:
+    # - outputs/files/ (K8s binaries)
+    # - outputs/images/ (container images as tar.gz)
+    # - outputs/debs/ (apt repository)
+    # - outputs/pypi/ (Python wheels)
+    # - outputs/kubespray-*.tar.gz (Kubespray source)
+    # - outputs/target-scripts/ (setup scripts)
     
-    images = []
-    binaries = []
-    
-    # Render Jinja2 templates
-    for key, value in defaults.items():
-        if is_template(value):
-            rendered = render_jinja2(value, context)
-            if is_image_reference(rendered):
-                images.append(rendered)
-            elif is_binary_url(rendered):
-                binaries.append(rendered)
-    
-    return images, binaries
+    return outputs_directory
 ```
 
 **Interface:**
-- `discover_assets(config) -> AssetManifest`
-- `download_asset(url, checksum) -> FilePath`
-- `verify_asset(filepath, checksum) -> Boolean`
+- `run_kubespray_offline() -> OutputsDirectory`
+- `verify_outputs(outputs_dir) -> Boolean`
+- `add_opencenter_images(additional_images_file) -> Boolean`
 
 ## Kubespray-Offline Integration
 
@@ -631,199 +637,146 @@ components:
 **Purpose:** Configure bastion host as local registry and repository hub.
 
 **Services:**
-- Docker Registry (port 5000): Serves container images
-- Nginx (port 8080): Serves apt and PyPI repositories
-- Python venv: Isolated environment for Ansible/Kubespray
+- Container Registry (port 35000): Serves container images (registry:2.8.3)
+- Nginx (port 80): Serves binaries, apt packages, and PyPI wheels (nginx:1.29.2)
+- Containerd: Container runtime for running registry and nginx
 
 **Configuration:**
 
 ```bash
-# Registry startup (idempotent)
-if ! docker ps -q -f name=local-registry | grep -q .; then
-    docker run -d \
-        -p 5000:5000 \
-        -v /opt/registry:/var/lib/registry \
+# Registry startup (idempotent, via kubespray-offline start-registry.sh)
+if ! podman ps -q -f name=registry | grep -q .; then
+    podman run -d \
+        -p 35000:5000 \
+        -v /var/lib/registry:/var/lib/registry \
         --restart=always \
-        --name local-registry \
-        registry:2
+        --name registry \
+        registry:2.8.3
 fi
 
-# Nginx repository server
-docker run -d \
-    -p 8080:80 \
-    -v /opt/opencenter/repos:/usr/share/nginx/html:ro \
+# Nginx repository server (via kubespray-offline start-nginx.sh)
+podman run -d \
+    -p 80:80 \
+    -v /opt/opencenter/outputs/files:/usr/share/nginx/html/files:ro \
+    -v /opt/opencenter/outputs/debs:/usr/share/nginx/html/debs:ro \
+    -v /opt/opencenter/outputs/pypi:/usr/share/nginx/html/pypi:ro \
     --restart=always \
-    --name repo-server \
-    nginx:alpine
+    --name nginx \
+    nginx:1.29.2
 ```
 
 **Interface:**
-- `setup_registry() -> RegistryEndpoint`
-- `setup_repository() -> RepositoryEndpoint`
+- `setup_bastion() -> BastionServices`
+- `verify_registry() -> HealthStatus`
+- `verify_nginx() -> HealthStatus`
 - `push_images(images, registry) -> Boolean`
-- `verify_services() -> HealthStatus`
+- `verify_image_availability(registry, image_list) -> Boolean`
 
-### 4. Infrastructure Provisioner (Terraform)
+### 4. openCenter Service Image Collection
 
-**Purpose:** Provision VMs and networks on OpenStack (optional component).
+**Purpose:** Collect and package container images required by openCenter platform services.
 
-**Filesystem Mirror Structure:**
+**Scope:** openCenter AirGap is responsible for:
+1. Identifying openCenter platform service image requirements
+2. Downloading platform service container images (via kubespray-offline)
+3. Including images in the Zarf package
+4. Pushing images to bastion registry during deployment
 
-```
-terraform-mirror/
-├── registry.terraform.io/
-│   ├── hashicorp/
-│   │   ├── local/
-│   │   │   └── 2.4.0/
-│   │   │       └── linux_amd64/
-│   │   │           └── terraform-provider-local_v2.4.0_x5
-│   │   └── null/
-│   │       └── 3.2.1/
-│   └── terraform-provider-openstack/
-│       └── openstack/
-│           └── 1.54.0/
-└── .terraform.lock.hcl
-```
+**Out of Scope:** openCenter AirGap does NOT deploy platform services. The openCenter platform (gitops-base) handles:
+- Gitea deployment and configuration
+- FluxCD installation and GitOps setup
+- All service deployment (cert-manager, ingress-nginx, Keycloak, observability stack, storage, policy, backup, etc.)
+- Service health verification and monitoring
 
-**Terraform Configuration:**
-
-```hcl
-# .terraformrc
-plugin_cache_dir   = "/opt/opencenter/terraform-cache"
-disable_checkpoint = true
-
-provider_installation {
-  filesystem_mirror {
-    path    = "/opt/opencenter/terraform-mirror"
-    include = ["*/*"]
-  }
-}
-```
-
-**Interface:**
-- `init_terraform(mirror_path) -> TerraformState`
-- `plan_infrastructure(config) -> Plan`
-- `apply_infrastructure(plan) -> Resources`
-- `generate_inventory(resources) -> AnsibleInventory`
-
-### 5. Cluster Bootstrapper (Kubespray)
-
-**Purpose:** Install Kubernetes using Ansible with offline configuration.
-
-**Offline Configuration Variables:**
+**Platform Service Images to Collect:**
 
 ```yaml
-# inventory/mycluster/group_vars/all/offline.yml
-kube_image_repo: "{{ bastion_ip }}:5000"
-gcr_image_repo: "{{ bastion_ip }}:5000"
-docker_image_repo: "{{ bastion_ip }}:5000"
-quay_image_repo: "{{ bastion_ip }}:5000"
+# FluxCD Controllers
+- ghcr.io/fluxcd/source-controller:v1.4.1
+- ghcr.io/fluxcd/kustomize-controller:v1.4.0
+- ghcr.io/fluxcd/helm-controller:v1.1.0
+- ghcr.io/fluxcd/notification-controller:v1.4.0
 
-download_run_once: true
-download_localhost: true
-local_release_dir: "/opt/opencenter/k8s-binaries"
+# Gitea
+- gitea/gitea:1.21.0
 
-# Containerd registry mirrors
-containerd_registries_mirrors:
-  - prefix: "registry.k8s.io"
-    mirrors:
-      - host: "http://{{ bastion_ip }}:5000"
-        capabilities: ["pull", "resolve"]
-  - prefix: "docker.io"
-    mirrors:
-      - host: "http://{{ bastion_ip }}:5000"
-        capabilities: ["pull", "resolve"]
+# Certificates
+- quay.io/jetstack/cert-manager-controller:v1.13.0
+- quay.io/jetstack/cert-manager-webhook:v1.13.0
+- quay.io/jetstack/cert-manager-cainjector:v1.13.0
+
+# Ingress & Networking
+- registry.k8s.io/ingress-nginx/controller:v1.9.0
+- registry.k8s.io/ingress-nginx/kube-webhook-certgen:v20231011-8b53cabe0
+- registry.k8s.io/gateway-api/admission-server:v1.0.0
+
+# Identity & Access
+- quay.io/keycloak/keycloak:21.1.1
+
+# Observability Stack
+- quay.io/prometheus/prometheus:v2.48.0
+- quay.io/prometheus/alertmanager:v0.26.0
+- grafana/grafana:10.2.0
+- quay.io/prometheus-operator/prometheus-operator:v0.69.0
+- quay.io/kube-state-metrics/kube-state-metrics:v2.10.0
+- grafana/loki:2.9.0
+- grafana/tempo:2.3.0
+- otel/opentelemetry-collector:0.88.0
+- grafana/mimir:2.10.0
+
+# Storage
+- longhornio/longhorn-manager:v1.5.0
+- longhornio/longhorn-engine:v1.5.0
+- longhornio/longhorn-ui:v1.5.0
+- gcr.io/cloud-provider-vsphere/csi/release/driver:v3.0.0
+- registry.k8s.io/provider-os/cinder-csi-plugin:v1.28.0
+
+# Policy & Security
+- ghcr.io/kyverno/kyverno:v1.10.0
+- quay.io/operator-framework/olm:v0.26.0
+- quay.io/fairwinds/rbac-manager:v1.0.0
+- quay.io/bitnami/sealed-secrets-controller:v0.24.0
+
+# Backup
+- velero/velero:v1.12.0
+- velero/velero-plugin-for-aws:v1.8.0
+
+# Additional Services
+- goharbor/harbor-core:v2.9.0
+- goharbor/harbor-portal:v2.9.0
+- ghcr.io/headlamp-k8s/headlamp:v0.20.0
+- ghcr.io/weaveworks/wego-app:v0.30.0
+- quay.io/metallb/controller:v0.13.0
+- quay.io/metallb/speaker:v0.13.0
+- postgres-operator/postgres-operator:v1.10.0
+- quay.io/strimzi/operator:0.38.0
 ```
 
-**Execution Flow:**
+**Integration with kubespray-offline:**
+
+Add platform service images to `build/kubespray-offline/imagelists/additional_images.txt`:
 
 ```bash
-# Activate Python venv
-source /opt/opencenter/venv/bin/activate
-
-# Execute Kubespray
-cd /opt/opencenter/kubespray
-ansible-playbook -i inventory/mycluster/hosts.yml \
-    --become \
-    --become-user=root \
-    cluster.yml
+# openCenter Platform Services
+ghcr.io/fluxcd/source-controller:v1.4.1
+ghcr.io/fluxcd/kustomize-controller:v1.4.0
+gitea/gitea:1.21.0
+quay.io/jetstack/cert-manager-controller:v1.13.0
+# ... (all platform service images)
 ```
+
+**Deployment Handoff:**
+
+After openCenter AirGap completes:
+1. ✅ Bastion registry contains all images (K8s + openCenter platform services)
+2. ✅ Bastion nginx serves binaries, packages, and wheels
+3. ✅ All images verified and pullable from registry
+4. ⏭️ openCenter platform provisions infrastructure, bootstraps cluster, and deploys services
 
 **Interface:**
-- `configure_inventory(nodes, bastion_ip) -> Inventory`
-- `execute_playbook(inventory) -> ClusterState`
-- `verify_cluster() -> HealthStatus`
-- `export_kubeconfig() -> KubeconfigPath`
-
-### 6. Core Services Deployer
-
-**Purpose:** Deploy GitOps infrastructure and core platform services.
-
-**Deployment Sequence:**
-
-1. **Gitea**: In-cluster Git server
-2. **Repository Seeding**: Push manifests to Gitea
-3. **FluxCD**: GitOps controllers
-4. **Core Services**: cert-manager, ingress-nginx, Keycloak, kube-prometheus-stack
-
-**GitOps Structure:**
-
-```
-gitea-repo/
-├── flux-system/
-│   ├── gotk-components.yaml
-│   ├── gotk-sync.yaml
-│   └── kustomization.yaml
-├── infrastructure/
-│   ├── cert-manager/
-│   ├── ingress-nginx/
-│   └── kustomization.yaml
-├── platform/
-│   ├── keycloak/
-│   ├── kube-prometheus-stack/
-│   └── kustomization.yaml
-└── clusters/
-    └── production/
-        ├── infrastructure.yaml
-        └── platform.yaml
-```
-
-**FluxCD Configuration:**
-
-```yaml
-# GitRepository pointing to internal Gitea
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: GitRepository
-metadata:
-  name: cluster-config
-  namespace: flux-system
-spec:
-  interval: 1m
-  url: http://gitea.gitea.svc.cluster.local:3000/gitea/cluster-config
-  ref:
-    branch: main
-
----
-# Kustomization for infrastructure
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: infrastructure
-  namespace: flux-system
-spec:
-  interval: 10m
-  sourceRef:
-    kind: GitRepository
-    name: cluster-config
-  path: ./infrastructure
-  prune: true
-```
-
-**Interface:**
-- `deploy_gitea(kubeconfig) -> GiteaEndpoint`
-- `seed_repository(manifests, gitea) -> RepositoryURL`
-- `install_flux(kubeconfig, repo_url) -> FluxStatus`
-- `verify_services(kubeconfig) -> ServiceStatus`
+- `collect_opencenter_images(version_spec) -> ImageList`
+- `add_to_additional_images(image_list, file_path) -> Boolean`
+- `verify_images_in_registry(registry_url, image_list) -> Boolean`
 
 ## Data Models
 
@@ -839,7 +792,6 @@ interface AssetManifest {
   binaries: Binary[];
   python_packages: PythonPackage[];
   system_packages: SystemPackage[];
-  terraform_providers: TerraformProvider[];
   
   checksums: Map<string, Checksum>;
 }
@@ -873,14 +825,6 @@ interface SystemPackage {
   checksum: Checksum;
 }
 
-interface TerraformProvider {
-  namespace: string;
-  type: string;
-  version: string;
-  platform: string;
-  checksum: Checksum;
-}
-
 interface Checksum {
   algorithm: "md5" | "sha256" | "sha512";
   value: string;
@@ -891,79 +835,26 @@ interface Checksum {
 
 ```typescript
 interface DeploymentConfig {
-  deployment_mode: "baremetal" | "openstack";
   bastion_ip: string;
-  ssh_user: string;
   install_path: string;
+  registry_port: number;  // Default: 35000
+  nginx_port: number;     // Default: 80
   
-  // Bare-metal specific
-  inventory?: AnsibleInventory;
-  
-  // OpenStack specific
-  openstack_config?: OpenStackConfig;
-  
-  // Kubernetes configuration
-  kubernetes: KubernetesConfig;
-  
-  // Core services
-  core_services: CoreServicesConfig;
+  // openCenter platform service images
+  opencenter_images: OpenCenterImages;
 }
 
-interface AnsibleInventory {
-  control_plane: Node[];
-  workers: Node[];
-  etcd: Node[];
-}
-
-interface Node {
-  hostname: string;
-  ip: string;
-  ssh_port: number;
-}
-
-interface OpenStackConfig {
-  auth_url: string;
-  project_name: string;
-  username: string;
-  password: string;  // Provided at runtime
-  region: string;
-  
-  control_plane_count: number;
-  worker_count: number;
-  flavor: string;
-  image: string;
-  network: string;
-}
-
-interface KubernetesConfig {
-  version: string;
-  cluster_name: string;
-  pod_network_cidr: string;
-  service_network_cidr: string;
-  cni: "calico" | "cilium";
-}
-
-interface CoreServicesConfig {
-  gitea: {
-    enabled: boolean;
-    admin_password: string;  // Provided at runtime
-  };
-  flux: {
-    enabled: boolean;
-  };
-  cert_manager: {
-    enabled: boolean;
-  };
-  ingress_nginx: {
-    enabled: boolean;
-  };
-  keycloak: {
-    enabled: boolean;
-    admin_password: string;  // Provided at runtime
-  };
-  prometheus: {
-    enabled: boolean;
-  };
+interface OpenCenterImages {
+  flux: string[];
+  gitea: string[];
+  cert_manager: string[];
+  ingress: string[];
+  identity: string[];
+  observability: string[];
+  storage: string[];
+  policy: string[];
+  backup: string[];
+  additional: string[];
 }
 ```
 
@@ -981,9 +872,8 @@ interface DeploymentState {
 enum DeploymentPhase {
   VERIFICATION = "verification",
   BASTION_SETUP = "bastion_setup",
-  INFRASTRUCTURE = "infrastructure",
-  CLUSTER_BOOTSTRAP = "cluster_bootstrap",
-  CORE_SERVICES = "core_services",
+  IMAGE_PUSH = "image_push",
+  VERIFICATION_COMPLETE = "verification_complete",
   COMPLETE = "complete",
   FAILED = "failed"
 }
@@ -1102,107 +992,89 @@ After analyzing all acceptance criteria, I've identified several areas where pro
 
 **Validates: Requirements 4.7, 4.10**
 
-#### Property 13: Service Health Verification
+#### Property 14: Service Health Verification (Bastion)
 
-*For any* running registry and repository services, health check requests to their endpoints should return successful responses.
+*For any* running registry and nginx services on bastion, health check requests to their endpoints should return successful responses.
 
 **Validates: Requirements 4.12**
 
-#### Property 14: Terraform Filesystem Mirror Resolution
+#### Property 15: openCenter Platform Service Images Available
 
-*For any* Terraform configuration with provider requirements, running `terraform init` with a filesystem mirror containing those providers should succeed without network access.
+*For any* openCenter platform service image in the package (20+ services including FluxCD, Gitea, cert-manager, ingress-nginx, Gateway API, Keycloak, Prometheus, Grafana, Loki, Tempo, OpenTelemetry, Mimir, Longhorn, vSphere CSI, OpenStack CSI, Kyverno, OLM, RBAC Manager, Velero, Harbor, Headlamp, Weave GitOps, MetalLB, Sealed Secrets, Postgres Operator, Strimzi Kafka), the image should be available in the bastion registry and pullable.
 
-**Validates: Requirements 5.1**
+**Validates: Requirements 5.8, 5.9, 5.10**
 
-#### Property 15: Terraform State Preservation
+**Note:** This property validates image availability, not service deployment. Service deployment is handled by the openCenter platform (gitops-base).
 
-*For any* Terraform state file, if `terraform apply` fails, the state file should be preserved and usable for subsequent recovery operations.
+#### Property 16: Deployment Idempotency (Bastion)
 
-**Validates: Requirements 5.8**
+#### Property 16: Deployment Idempotency (Bastion)
 
-#### Property 16: Kubespray Offline Configuration Completeness
+*For any* successfully deployed bastion component (registry, nginx, image push), re-deploying the same component should complete without errors and without changing the bastion state (no new containers created, existing containers unchanged, no duplicate images pushed).
 
-*For any* bastion IP address, generating a Kubespray inventory should configure all image repositories, binary paths, and package repositories to point to the bastion host.
+**Validates: Requirements 6.1, 6.2, 6.3, 6.10**
 
-**Validates: Requirements 6.1, 6.2, 6.3, 6.4**
-
-#### Property 17: Cluster Health Verification
-
-*For any* completed Kubernetes cluster deployment, querying the cluster should show all control plane components in healthy state and all worker nodes in Ready state.
-
-**Validates: Requirements 6.9, 6.10**
-
-#### Property 18: Core Services Readiness
-
-*For any* deployed core service, querying the cluster should show the service's pods in Running state and its Ingress resources with valid endpoints.
-
-**Validates: Requirements 7.11, 7.12**
-
-#### Property 19: Deployment Idempotency
-
-*For any* successfully deployed Zarf component, re-deploying the same component should complete without errors and without changing the cluster state (no new resources created, existing resources unchanged).
-
-**Validates: Requirements 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.10**
-
-#### Property 20: Log Preservation Across Failures
+#### Property 17: Log Preservation Across Failures
 
 *For any* deployment operation that fails, all logs generated up to the failure point should be preserved in a persistent location on the bastion host.
 
-**Validates: Requirements 8.7**
+**Validates: Requirements 6.7**
 
-#### Property 21: Component Independence
+#### Property 18: Component Independence
 
 *For any* Zarf component, deploying that component independently should succeed if its dependencies are already deployed, without requiring re-deployment of other components.
 
-**Validates: Requirements 8.9**
+**Validates: Requirements 6.9**
 
-#### Property 22: Offline Operation Compliance
+#### Property 19: Offline Operation Compliance
 
-*For any* deployment execution, monitoring all network connections should show zero outbound connections to external internet addresses (only connections to bastion host and cluster nodes).
+*For any* deployment execution, monitoring all network connections should show zero outbound connections to external internet addresses (only connections to bastion host and local services).
 
-**Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5, 9.6**
+**Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5, 7.6**
 
-#### Property 23: Network Connection Logging
+#### Property 20: Network Connection Logging
 
 *For any* deployment execution, all network connections (source, destination, port, protocol) should be logged to an audit file.
 
-**Validates: Requirements 9.7**
+**Validates: Requirements 7.7**
 
-#### Property 24: External Access Detection
+#### Property 21: External Access Detection
 
 *For any* component that attempts to connect to an external internet address, the deployment system should detect the attempt, fail the deployment, and log a clear error message identifying the component and target address.
 
-**Validates: Requirements 9.8**
+**Validates: Requirements 7.8**
 
-#### Property 25: Version Pinning Completeness
+#### Property 22: Version Pinning Completeness
 
-*For any* configuration file in the package (Kubespray, Terraform, Helm charts), parsing the file should show all version specifications are explicit (no "latest", "stable", or wildcard versions).
+#### Property 22: Version Pinning Completeness
 
-**Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7**
+*For any* configuration file in the package (Kubespray, image lists), parsing the file should show all version specifications are explicit (no "latest", "stable", or wildcard versions).
 
-#### Property 26: Deployment Determinism
+**Validates: Requirements 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7**
 
-*For any* Zarf package, deploying it twice to identical infrastructure should produce clusters with identical state (same versions, same configurations, same resource counts).
+#### Property 23: Build Determinism
 
-**Validates: Requirements 10.8**
+*For any* Zarf package, building it twice with the same configuration should produce packages with identical image lists and versions.
 
-#### Property 27: Version Resolution Strictness
+**Validates: Requirements 8.8**
+
+#### Property 24: Version Resolution Strictness
 
 *For any* dependency specification without an explicit version, the build system should fail with an error identifying the unresolved dependency.
 
-**Validates: Requirements 10.10**
+**Validates: Requirements 8.10**
 
-#### Property 28: Operation Logging Completeness
+#### Property 25: Operation Logging Completeness
 
-*For any* deployment operation (Terraform, Kubespray, Zarf action), all command output (stdout and stderr) should be captured and written to timestamped log files.
+*For any* deployment operation (bastion setup, image push, Zarf action), all command output (stdout and stderr) should be captured and written to timestamped log files.
 
-**Validates: Requirements 11.1, 11.2, 11.3, 11.4, 11.5, 11.6**
+**Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5, 9.6**
 
-#### Property 29: Log Persistence Across Re-runs
+#### Property 26: Log Persistence Across Re-runs
 
 *For any* deployment re-run, previous log files should be preserved (not overwritten) with distinct timestamps or sequence numbers.
 
-**Validates: Requirements 11.8**
+**Validates: Requirements 9.8**
 
 ## Error Handling
 
@@ -1224,15 +1096,10 @@ After analyzing all acceptance criteria, I've identified several areas where pro
 |:---|:---|:---|:---|
 | **Package Corruption** | Checksum validation fails | Halt deployment, log error | Re-transfer package from source |
 | **Signature Verification Failure** | Cosign verification fails | Halt deployment, log error | Verify package source, re-transfer if needed |
-| **Registry Startup Failure** | Docker run fails or port conflict | Log error, check existing containers | Stop conflicting container or use different port |
+| **Registry Startup Failure** | Podman run fails or port conflict | Log error, check existing containers | Stop conflicting container or use different port |
+| **Nginx Startup Failure** | Podman run fails or port conflict | Log error, check existing containers | Stop conflicting container or use different port |
+| **Image Load Failure** | Podman load returns error | Log error, retry once | Check disk space, verify image tar.gz integrity |
 | **Image Push Failure** | Registry push returns error | Log error, retry once | Check registry logs, verify disk space |
-| **Terraform Init Failure** | Provider not found in mirror | Halt infrastructure phase | Verify mirror structure, rebuild package if needed |
-| **Terraform Apply Failure** | Resource creation fails | Preserve state, log error | Review Terraform logs, fix configuration, re-run |
-| **Kubespray Failure** | Ansible task fails | Preserve logs, halt cluster phase | Review Ansible logs, fix node issues, re-run playbook |
-| **Node Unreachable** | SSH connection fails | Log error with node details | Verify network, SSH keys, firewall rules |
-| **Image Pull Failure** | Node cannot pull from registry | Log error with image details | Verify registry running, check containerd config |
-| **FluxCD Reconciliation Failure** | Kustomization fails | Log error, preserve Git state | Review Flux logs, fix manifests in Gitea |
-| **Service Unhealthy** | Pod not reaching Running state | Log error with pod details | Check pod logs, events, resource constraints |
 | **External Network Attempt** | Connection to non-local address | Halt deployment, log violation | Identify component, fix configuration, rebuild package |
 
 ### Error Recovery Patterns
@@ -1246,15 +1113,14 @@ zarf package deploy openCenter-airgap.tar.zst \
 ```
 
 **State Preservation:**
-- Terraform state: `/opt/opencenter/terraform/terraform.tfstate`
-- Kubespray artifacts: `/opt/opencenter/kubespray/inventory/mycluster/artifacts/`
 - Deployment logs: `/opt/opencenter/logs/<timestamp>/`
-- Registry data: `/opt/registry/`
+- Registry data: `/var/lib/registry/`
+- Nginx data: `/opt/opencenter/outputs/`
 
 **Rollback Strategy:**
-- Infrastructure: `terraform destroy` to clean up OpenStack resources
-- Cluster: Kubespray reset playbook to clean nodes
-- Services: `flux uninstall` to remove FluxCD and managed resources
+- Bastion services: Stop and remove containers (`podman stop registry nginx && podman rm registry nginx`)
+- Registry data: Remove `/var/lib/registry/` to start fresh
+- Logs: Preserved for troubleshooting
 
 ## Testing Strategy
 
@@ -1356,44 +1222,25 @@ By leveraging kubespray-offline, openCenter AirGap gains:
 - Setup registry on clean system
 - Reuse existing registry (idempotency)
 - Handle port conflict gracefully
+- Push images to registry
+- Verify image availability
 
 **Property Tests:**
 - Property 10: Asset Extraction Completeness
 - Property 11: Python Wheel Installation Completeness
 - Property 12: Container Image Registry Round-Trip
-- Property 13: Service Health Verification
+- Property 14: Service Health Verification (Bastion)
 
-#### Infrastructure Provisioner
-
-**Unit Tests:**
-- Skip Terraform in bare-metal mode
-- Generate inventory from Terraform outputs
-- Preserve state on apply failure
-
-**Property Tests:**
-- Property 14: Terraform Filesystem Mirror Resolution
-- Property 15: Terraform State Preservation
-
-#### Cluster Bootstrapper
+#### openCenter Platform Service Image Collection
 
 **Unit Tests:**
-- Generate inventory with bastion IP
-- Configure containerd mirrors correctly
-- Export kubeconfig to expected location
+- Verify openCenter image list is complete (20+ services)
+- Verify images are added to additional_images.txt
+- Verify images are pushed to bastion registry
+- Verify images are pullable from registry
 
 **Property Tests:**
-- Property 16: Kubespray Offline Configuration Completeness
-- Property 17: Cluster Health Verification
-
-#### Core Services Deployer
-
-**Unit Tests:**
-- Deploy Gitea with default configuration
-- Create FluxCD GitRepository resource
-- Verify Ingress creation
-
-**Property Tests:**
-- Property 18: Core Services Readiness
+- Property 15: openCenter Platform Service Images Available
 
 #### Deployment System (Cross-Cutting)
 
@@ -1403,12 +1250,12 @@ By leveraging kubespray-offline, openCenter AirGap gains:
 - Deploy single component independently
 
 **Property Tests:**
-- Property 19: Deployment Idempotency
-- Property 20: Log Preservation Across Failures
-- Property 21: Component Independence
-- Property 22: Offline Operation Compliance
-- Property 23: Network Connection Logging
-- Property 24: External Access Detection
+- Property 16: Deployment Idempotency (Bastion)
+- Property 17: Log Preservation Across Failures
+- Property 18: Component Independence
+- Property 19: Offline Operation Compliance
+- Property 20: Network Connection Logging
+- Property 21: External Access Detection
 
 #### Build System (Cross-Cutting)
 
@@ -1418,9 +1265,9 @@ By leveraging kubespray-offline, openCenter AirGap gains:
 - Generate SBOM with all versions
 
 **Property Tests:**
-- Property 25: Version Pinning Completeness
-- Property 26: Deployment Determinism
-- Property 27: Version Resolution Strictness
+- Property 22: Version Pinning Completeness
+- Property 23: Build Determinism
+- Property 24: Version Resolution Strictness
 
 #### Logging System (Cross-Cutting)
 
@@ -1430,23 +1277,28 @@ By leveraging kubespray-offline, openCenter AirGap gains:
 - Preserve logs across re-runs
 
 **Property Tests:**
-- Property 28: Operation Logging Completeness
-- Property 29: Log Persistence Across Re-runs
+- Property 25: Operation Logging Completeness
+- Property 26: Log Persistence Across Re-runs
 
 ### Integration Testing
 
 **End-to-End Scenarios:**
-1. **Bare-metal Deployment**: Build package → Deploy to pre-provisioned VMs → Verify cluster → Verify services
-2. **OpenStack Deployment**: Build package → Deploy with Terraform → Verify cluster → Verify services
-3. **Failure Recovery**: Simulate node failure during Kubespray → Re-run → Verify recovery
-4. **Idempotency**: Deploy package → Re-deploy same package → Verify no changes
-5. **Offline Validation**: Deploy with network monitoring → Verify zero external connections
+1. **Bastion Setup**: Build package → Deploy to bastion → Verify registry → Verify nginx → Verify images
+2. **Failure Recovery**: Simulate registry failure during image push → Re-run → Verify recovery
+3. **Idempotency**: Deploy package → Re-deploy same package → Verify no changes
+4. **Offline Validation**: Deploy with network monitoring → Verify zero external connections
 
 **Test Environment:**
-- Nested virtualization for OpenStack testing
-- Vagrant/Libvirt for bare-metal simulation
+- Single bastion host (Ubuntu 24.04)
 - Network isolation via iptables rules
 - Packet capture for offline validation
+
+**Handoff Verification:**
+- Verify all K8s images available in registry
+- Verify all openCenter platform service images available (20+ services)
+- Verify registry accessible on port 35000
+- Verify nginx accessible on port 80
+- Document handoff contract for openCenter platform
 
 ### Continuous Integration
 
@@ -1455,11 +1307,10 @@ By leveraging kubespray-offline, openCenter AirGap gains:
 2. Run property tests (100 iterations each)
 3. Build Zarf package
 4. Verify package integrity
-5. Deploy to test environment (bare-metal)
+5. Deploy to test bastion
 6. Run integration tests
-7. Deploy to test environment (OpenStack)
-8. Run integration tests
-9. Generate test report
+7. Verify image availability
+8. Generate test report
 
 **Test Artifacts:**
 - Unit test results (JUnit XML)
@@ -1474,11 +1325,10 @@ By leveraging kubespray-offline, openCenter AirGap gains:
 **Metrics:**
 - Package build time (target: < 30 minutes)
 - Package size (target: < 5GB)
-- Deployment time bare-metal (target: < 30 minutes)
-- Deployment time OpenStack (target: < 45 minutes)
-- Registry image push time (target: < 10 minutes)
+- Bastion setup time (target: < 10 minutes)
+- Image push time (target: < 10 minutes)
 
 **Load Testing:**
-- Deploy to clusters of varying sizes (3-10 nodes)
-- Measure resource usage on bastion host
-- Verify registry performance under concurrent pulls
+- Measure registry performance under concurrent pulls
+- Verify nginx performance serving binaries
+- Test with varying image counts (100-500 images)

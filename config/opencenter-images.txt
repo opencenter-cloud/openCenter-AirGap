@@ -1,0 +1,169 @@
+# openCenter Platform Service Images
+# Generated from gitops-base assets
+# Total images: 137
+
+# Cert-Manager (5 images)
+quay.io/jetstack/cert-manager-acmesolver
+quay.io/jetstack/cert-manager-cainjector
+quay.io/jetstack/cert-manager-controller
+quay.io/jetstack/cert-manager-startupapicheck
+quay.io/jetstack/cert-manager-webhook
+
+# Ingress & Gateway (2 images)
+docker.io/envoyproxy/gateway:v1.5.0
+docker.io/envoyproxy/ratelimit:3e085e5b
+
+# Identity (1 images)
+quay.io/keycloak/keycloak:26.3.0
+
+# Observability (31 images)
+ghcr.io/open-telemetry/opentelemetry-operator/operator-opamp-bridge
+goharbor/harbor-exporter
+goharbor/harbor-exporter:v2.13.2
+grafana/agent
+grafana/enterprise-logs
+grafana/enterprise-logs:3.5.4
+grafana/enterprise-traces
+grafana/enterprise-traces:v2.8.1
+grafana/loki
+grafana/loki-canary
+grafana/loki-helm-test
+grafana/loki-helm-test:latest
+grafana/loki:3.5.7
+grafana/mimir
+grafana/mimir-continuous-test
+grafana/mimir:3.0.0
+grafana/tempo
+grafana/tempo-query
+grafanalabs-global/docker-enterprise-provisioner-prod/enterprise-provisioner
+grafanalabs-global/docker-enterprise-provisioner-prod/enterprise-provisioner:latest
+myregistry/apache-agent:latest
+myregistry/dotnet-agent:latest
+myregistry/go-agent:latest
+myregistry/java-agent:latest
+myregistry/nginx-agent:latest
+myregistry/nodejs-agent:latest
+myregistry/python-agent:latest
+otel/opentelemetry-collector-k8s
+prom/memcached-exporter
+prom/memcached-exporter:v0.15.3
+prometheus-operator/prometheus-config-reloader
+
+# Storage (30 images)
+csi-vsphere/driver
+csi-vsphere/driver:v3.5.0
+csi-vsphere/syncer
+csi-vsphere/syncer:v3.5.0
+registry.k8s.io/provider-os/cinder-csi-plugin
+registry.k8s.io/provider-os/openstack-cloud-controller-manager
+registry.k8s.io/sig-storage/csi-attacher
+registry.k8s.io/sig-storage/csi-attacher:v4.7.0
+registry.k8s.io/sig-storage/csi-node-driver-registrar
+registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.12.0
+registry.k8s.io/sig-storage/csi-provisioner
+registry.k8s.io/sig-storage/csi-provisioner:v5.1.0
+registry.k8s.io/sig-storage/csi-resizer
+registry.k8s.io/sig-storage/csi-resizer:v1.12.0
+registry.k8s.io/sig-storage/csi-snapshotter
+registry.k8s.io/sig-storage/csi-snapshotter:v8.1.0
+registry.k8s.io/sig-storage/livenessprobe
+registry.k8s.io/sig-storage/livenessprobe:v2.14.0
+sig-storage/csi-attacher
+sig-storage/csi-attacher:v4.8.1
+sig-storage/csi-node-driver-registrar
+sig-storage/csi-node-driver-registrar:v2.13.0
+sig-storage/csi-provisioner
+sig-storage/csi-provisioner:v4.0.1
+sig-storage/csi-resizer
+sig-storage/csi-resizer:v1.14.0
+sig-storage/csi-snapshotter
+sig-storage/csi-snapshotter:v8.2.0
+sig-storage/livenessprobe
+sig-storage/livenessprobe:v2.15.0
+
+# Policy & Security (12 images)
+bitnami/sealed-secrets-controller
+bitnami/sealed-secrets-controller:0.30.0
+gcr.io/kubebuilder/kube-rbac-proxy
+gcr.io/kubebuilder/kube-rbac-proxy:v0.12.0
+kyverno/background-controller
+kyverno/cleanup-controller
+kyverno/kyverno
+kyverno/kyverno-cli
+kyverno/kyvernopre
+kyverno/reports-controller
+quay.io/reactiveops/rbac-manager
+quay.io/reactiveops/rbac-manager:v1.9.2
+
+# Backup (4 images)
+velero/velero
+velero/velero-plugin-for-aws:v1.12.2
+velero/velero-restore-helper:v1.10.2
+velero/velero:v1.16.2
+
+# Harbor (18 images)
+goharbor/harbor-core
+goharbor/harbor-core:v2.13.2
+goharbor/harbor-db
+goharbor/harbor-db:v2.13.2
+goharbor/harbor-jobservice
+goharbor/harbor-jobservice:v2.13.2
+goharbor/harbor-portal
+goharbor/harbor-portal:v2.13.2
+goharbor/harbor-registryctl
+goharbor/harbor-registryctl:v2.13.2
+goharbor/nginx-photon
+goharbor/nginx-photon:v2.13.2
+goharbor/redis-photon
+goharbor/redis-photon:v2.13.2
+goharbor/registry-photon
+goharbor/registry-photon:v2.13.2
+goharbor/trivy-adapter-photon
+goharbor/trivy-adapter-photon:v2.13.2
+
+# Headlamp (1 images)
+headlamp-k8s/headlamp
+
+# Weave GitOps (2 images)
+ghcr.io/weaveworks/wego-app
+ghcr.io/weaveworks/wego-app:v0.39.0-rc.2
+
+# MetalLB (4 images)
+quay.io/frrouting/frr
+quay.io/frrouting/frr:9.1.0
+quay.io/metallb/controller
+quay.io/metallb/speaker
+
+# Postgres Operator (5 images)
+ghcr.io/zalando/postgres-operator/logical-backup:v1.13.0
+ghcr.io/zalando/spilo-17:4.0-p2
+registry.opensource.zalan.do/acid/pgbouncer:master-32
+zalando/postgres-operator
+zalando/postgres-operator:v1.14.0
+
+# Kafka (2 images)
+apache/kafka-native
+apache/kafka-native:4.1.0
+
+# Additional (20 images)
+alpine/kubectl
+alpine/kubectl:latest
+angelbarrera92/basic-auth-reverse-proxy:dev
+busybox:latest
+curl:8.10.1
+docker.io/kiwigrid/k8s-sidecar
+docker.io/kiwigrid/k8s-sidecar:1.30.10
+ghcr.io/rackerlabs/genestack-images/alert-proxy
+ghcr.io/rackerlabs/genestack-images/alert-proxy:latest
+ghcr.io/rackerlabs/genestack-images/kubectl
+ghcr.io/rackerlabs/genestack-images/kubectl:1758654890
+janeczku/go-dnsmasq:release-1.0.7
+kubectl:v1.32.7
+memcached:1.6.39-alpine
+myregistry/myimage:latest
+nginxinc/nginx-unprivileged
+nginxinc/nginx-unprivileged:1.27-alpine
+nginxinc/nginx-unprivileged:1.29-alpine
+rancher/kubectl
+rancher/kubectl:v1.34.1
+

@@ -1,0 +1,9 @@
+ghcr.io/opencenter-cloud/cert-manager:v1.18.2
+ghcr.io/opencenter-cloud/gateway-helm:v0.0.0-latest
+ghcr.io/opencenter-cloud/headlamp:0.35.0
+ghcr.io/opencenter-cloud/kube-prometheus-stack:77.6.0
+ghcr.io/opencenter-cloud/kyverno:3.6.0
+ghcr.io/opencenter-cloud/metallb:0.15.2
+ghcr.io/opencenter-cloud/postgres-operator:1.14.0
+ghcr.io/opencenter-cloud/rbac-manager:1.21.1
+ghcr.io/opencenter-cloud/vsphere-csi:3.8.1

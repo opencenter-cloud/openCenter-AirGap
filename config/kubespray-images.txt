@@ -1,0 +1,8 @@
+# Kubespray and Kubernetes Core Images
+# Generated from kubespray-offline image lists
+# These are infrastructure images required for Kubernetes cluster
+
+# Core Kubernetes Images (from kubespray-offline)
+nginx:1.29.2
+registry:2.8.3
+
