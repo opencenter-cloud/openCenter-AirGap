@@ -1,7 +1,7 @@
 # openCenter AirGap .gitignore
 
 # Build artifacts
-build/
+/build/
 dist/
 *.tar
 *.tar.gz
