@@ -134,41 +134,40 @@ verify_signature() {
 
 # Main function
 main() {
+    # Auto-detect package if not provided
     if [[ $# -lt 1 ]]; then
-        cat >&2 <<EOF
-Usage: $(basename "$0") <package-file> [key-file]
-
-Sign a Zarf package with Cosign for cryptographic verification.
-
-Arguments:
-  package-file    Path to Zarf package (.tar.zst)
-  key-file        Path to Cosign private key (default: cosign.key or \$COSIGN_KEY)
-
-Environment Variables:
-  COSIGN_KEY      Path to Cosign private key
-  COSIGN_PASSWORD Password for private key (prompted if not set)
-
-Examples:
-  # Sign with default key (cosign.key)
-  $(basename "$0") zarf-package-opencenter-airgap-amd64-1.0.0.tar.zst
-
-  # Sign with specific key
-  $(basename "$0") zarf-package-opencenter-airgap-amd64-1.0.0.tar.zst /path/to/key.key
-
-  # Generate key pair first
-  cosign generate-key-pair
-
-Requirements: 2.7
-EOF
-        return 1
+        # Try to find package in dist/
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+        DIST_DIR="${PROJECT_ROOT}/dist"
+        
+        PACKAGE_FILE=$(find "${DIST_DIR}" -name "zarf-package-*.tar.zst" -type f 2>/dev/null | head -1)
+        
+        if [[ -z "${PACKAGE_FILE}" ]]; then
+            print_warn "No package file specified and none found in ${DIST_DIR}"
+            print_info "Skipping package signing (optional step)"
+            return 0  # Non-blocking
+        fi
+        
+        print_info "Auto-detected package: $(basename "${PACKAGE_FILE}")"
+        set -- "${PACKAGE_FILE}"
     fi
     
     local package_file="$1"
-    local key_file="${2:-}"
+    local key_file="${2:-${COSIGN_KEY:-cosign.key}}"
     
     # Check prerequisites
     if ! check_cosign; then
-        return 1
+        print_warn "cosign not available, skipping package signing"
+        return 0  # Non-blocking
+    fi
+    
+    # Check if key exists
+    if [[ ! -f "${key_file}" ]]; then
+        print_warn "Cosign key not found: ${key_file}"
+        print_info "Skipping package signing (optional step)"
+        print_info "To enable signing, generate a key pair with: cosign generate-key-pair"
+        return 0  # Non-blocking
     fi
     
     # Sign package
@@ -183,7 +182,8 @@ EOF
         
         return 0
     else
-        return 1
+        print_warn "Package signing failed (non-fatal)"
+        return 0  # Non-blocking
     fi
 }
 

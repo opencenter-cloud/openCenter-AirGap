@@ -482,7 +482,7 @@ This implementation plan integrates **kubespray-offline@main** as the foundation
   - Run integration tests: `./tests/integration/test_airgap_deployment.py`
   - Ensure all tests pass, ask the user if questions arise
 
-- [ ] 21. Create build automation script
+- [-] 21. Create build automation script
 - [ ] 21. Create build automation script
   - [ ] 21.1 Create master build script
     - Create `scripts/build/build.sh` that orchestrates the complete build process

@@ -70,7 +70,7 @@ main() {
     # Show summary
     echo ""
     log_info "Image categories:"
-    grep "^# =" "${ADDITIONAL_IMAGES}" | sed 's/^# = */  - /' | sed 's/ =.*//'
+    grep "^# [A-Z]" "${ADDITIONAL_IMAGES}" | sed 's/^# */  - /' | sed 's/ (.*//' || true
     echo ""
     
     log_info "Next step: Run kubespray-offline download-all.sh"

@@ -350,7 +350,7 @@ if [ -n "${PACKAGE_PATH}" ]; then
     echo ""
 else
     echo "NEXT STEPS:"
-    echo "  1. Build a Zarf package: ./scripts/build/build.sh"
+    echo "  1. Build a Zarf package: python3 scripts/build/build.py --clean"
     echo "  2. Run this script with --package flag to test actual deployment"
     echo ""
 fi

@@ -75,6 +75,6 @@ fi
 echo ""
 log_info "Next steps:"
 echo "  1. Review the generated image list: $OUTPUT_FILE"
-echo "  2. Run build script: ./scripts/build/build.sh"
+echo "  2. Run build script: python3 scripts/build/build.py --clean"
 echo "  3. kubespray-offline will download all images during build"
 echo ""

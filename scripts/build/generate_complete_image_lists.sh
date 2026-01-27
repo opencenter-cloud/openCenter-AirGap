@@ -287,7 +287,7 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Review the generated lists"
-    echo "  2. Run: ./scripts/build/build.sh"
+    echo "  2. Run: python3 scripts/build/build.py --clean"
     echo "  3. kubespray-offline will download all images"
     echo ""
     

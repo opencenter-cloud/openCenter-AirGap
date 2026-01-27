@@ -13,7 +13,7 @@
         "ghcr.io",
         "docker.io",
         "registry-1.docker.io",
-        "index.docker.io",
+        "index.docker.io",5
         "auth.docker.io",
         "production.cloudflare.docker.com",
         "quay.io",

@@ -10,7 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-BUILD_SCRIPT="${PROJECT_ROOT}/scripts/build/build.sh"
+BUILD_SCRIPT="${PROJECT_ROOT}/scripts/build/build.py"
 SNAPSHOT_SCRIPT="${PROJECT_ROOT}/scripts/build/snapshot_image_list.py"
 COMPARE_SCRIPT="${PROJECT_ROOT}/scripts/build/compare_image_lists.py"
 
@@ -178,11 +178,11 @@ if [ "$SKIP_BUILD" = false ]; then
         exit 2
     fi
     
-    # Note: This is a simplified test. Full build would run build.sh
+    # Note: This is a simplified test. Full build would run: python3 scripts/build/build.py
     # For now, we'll document the expected behavior
     log_warn "Full build test requires kubespray-offline assets"
     log_warn "This test validates the comparison logic only"
-    log_warn "To test actual builds, run: $BUILD_SCRIPT"
+    log_warn "To test actual builds, run: python3 $BUILD_SCRIPT --clean"
     
     # Create mock packages for testing (if no real packages exist)
     if [ ! -d "${PROJECT_ROOT}/dist" ] || [ -z "$(ls -A ${PROJECT_ROOT}/dist/*.tar.zst 2>/dev/null)" ]; then

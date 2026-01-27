@@ -331,7 +331,7 @@ show_next_steps() {
     echo "   ./scripts/build/collect_opencenter_assets.sh"
     echo ""
     echo "3. Build air-gap package:"
-    echo "   ./scripts/build/build.sh"
+    echo "   python3 scripts/build/build.py --clean"
     echo ""
     echo "Documentation:"
     echo "  • Token reference: docs/reference/configuration/github-token.md"

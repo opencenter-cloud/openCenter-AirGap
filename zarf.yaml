@@ -86,10 +86,6 @@ components:
   - source: assets/kubespray/
     target: '###ZARF_VAR_INSTALL_PATH###/kubespray/'
     executable: false
-    excludes:
-    - '**/.git/**'
-    - '**/.github/**'
-    - '**/.gitlab-ci/**'
   - source: assets/k8s-binaries/
     target: '###ZARF_VAR_INSTALL_PATH###/k8s-binaries/'
     executable: false

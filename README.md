@@ -93,26 +93,32 @@ Production-grade Kubernetes deployment for completely disconnected environments.
 git clone <repo-url>
 cd opencenter-airgap
 
-# 2. Setup Python environment
-python3.12 -m venv venv
-source venv/bin/activate
-pip install pyyaml jinja2 requests
+# 2. Setup GitHub token for openCenter assets
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+# Or create .env file: echo "GITHUB_TOKEN=ghp_xxxxxxxxxxxx" > .env
 
-# 3. Setup GitHub token for openCenter assets
-./scripts/build/setup_github_token.sh
-# Follow interactive prompts to create and validate token
-
-# 4. Clone kubespray-offline
-git clone -b main https://github.com/tmurakam/kubespray-offline.git build/kubespray-offline
-
-# 5. Configure versions (optional - defaults are production-ready)
-# Edit build/kubespray-offline/target-scripts/config.sh
-# Edit build/kubespray-offline/imagelists/additional_images.txt
-
-# 6. Run build (30-60 minutes)
-./scripts/build/build.sh
+# 3. Run build (30-60 minutes, Python environment created automatically)
+python3 scripts/build/build.py --clean
 
 # Output: dist/zarf-package-openCenter-airgap-amd64-1.0.0.tar.zst
+```
+
+Build system features:
+- Automatic resume after failures
+- Parallel execution of independent steps
+- State tracking and progress reporting
+- Comprehensive logging
+
+Resume after interruption:
+```bash
+# Resume from last incomplete step
+python3 scripts/build/build.py
+
+# Resume from specific step
+python3 scripts/build/build.py --from-step validate_versions
+
+# View build state
+cat build/.build-state.json | python3 -m json.tool
 ```
 
 ### Transfer (Zone B)
@@ -321,10 +327,14 @@ EOF
 │   └── troubleshooting-guide.md
 ├── scripts/
 │   ├── build/
-│   │   ├── build.sh          # Master build script
+│   │   ├── build.py          # Main build orchestrator
+│   │   ├── build_state.py    # State management
+│   │   ├── build_steps.py    # Step definitions
+│   │   ├── build_executor.py # Execution engine
+│   │   ├── workers/          # Python worker functions
 │   │   ├── organize_assets_for_zarf.sh
-│   │   ├── generate_zarf_yaml.py
-│   │   └── verify_sbom.py
+│   │   ├── collect_kubespray_offline.sh
+│   │   └── collect_opencenter_assets.sh
 │   └── deploy/
 │       ├── deploy.sh         # Master deployment script
 │       ├── generate_inventory_baremetal.py
@@ -369,14 +379,47 @@ Documentation organized by purpose using the [Diátaxis framework](docs/taxonomy
 
 ### Build Issues
 
+**Build fails at specific step**:
+```bash
+# Check logs
+tail -100 build/build-*.log | grep ERROR
+
+# Resume after fixing issue
+python3 scripts/build/build.py
+
+# Skip problematic step temporarily
+python3 scripts/build/build.py --skip-step problematic_step
+```
+
+**Prerequisites check fails**:
+```bash
+# Check what's missing
+python3 scripts/build/build.py --clean 2>&1 | grep "✗"
+
+# Install missing tools
+sudo apt-get install git jq skopeo podman zarf
+```
+
 **kubespray-offline download fails**:
 ```bash
 # Check network connectivity
 curl -I https://github.com
 
-# Retry with verbose logging
-cd build/kubespray-offline
-bash -x download-all.sh
+# Resume (will retry failed downloads)
+python3 scripts/build/build.py
+
+# Force re-download
+python3 scripts/build/build.py --force --from-step clone_kubespray_offline
+```
+
+**Build state corrupted**:
+```bash
+# Start fresh
+python3 scripts/build/build.py --clean
+
+# Or manually delete state
+rm build/.build-state.json
+rm -rf build/.completed/
 ```
 
 **Package size exceeds 10GB**:
@@ -384,16 +427,20 @@ bash -x download-all.sh
 # Check asset sizes
 du -sh build/kubespray-offline/outputs/*
 
-# Remove unnecessary images from additional_images.txt
+# Remove unnecessary images from config/opencenter-images.txt
 ```
 
 **Disk space exhausted during build**:
 ```bash
+# Clean container cache
+podman system prune -a -f
+
 # Clean build artifacts
-./scripts/cleanup.sh --build --assets
+rm -rf build/kubespray-offline/outputs
+python3 scripts/build/build.py --clean
 
 # Check available space (need 100GB+)
-df -h /opt
+df -h .
 ```
 
 ### Deployment Issues
