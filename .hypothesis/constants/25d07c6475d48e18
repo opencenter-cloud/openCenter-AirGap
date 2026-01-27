@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/build_state.py
+# hypothesis_version: 6.151.2
+
+[384, 'BuildState', 'StepResult', 'build_id', 'completed', 'duration_seconds', 'end_time', 'error_message', 'failed', 'in_progress', 'last_update', 'name', 'not_started', 'skipped', 'start_time', 'status', 'steps']

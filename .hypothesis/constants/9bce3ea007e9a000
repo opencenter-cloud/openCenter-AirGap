@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/workers/merge_images.py
+# hypothesis_version: 6.151.2
+
+['\nImage categories:', '#', '# ', '(', 'build', 'config', 'imagelists', 'kubespray-offline', 'r']

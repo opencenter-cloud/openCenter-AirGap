@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/version_validator.py
+# hypothesis_version: 6.151.2
+
+['#', '(\\w+):\\s*["\\\']?', '*', '**/*.env', '**/*.hcl', '**/*.py', '**/*.sh', '**/*.tf', '**/*.txt', '**/*.yaml', '**/*.yml', '--config-only', '--fail-on-violations', '--root-dir', '.env', '.git', '.kiro', '.pytest_cache', '.sh', '.txt', ':', '<', '<=', '>', '>=', '?', '^', '^[a-f0-9]{40}$', '^[a-f0-9]{7,12}$', '__main__', '__pycache__', 'assets/kubespray', 'config', 'dev', 'dist', 'edge', 'http://', 'https://', 'ignore', 'invalid', 'latest', 'main', 'master', 'node_modules', 'pinned', 'r', 'stable', 'store_true', 'unpinned', 'utf-8', 'venv', 'version', 'wildcard', 'x', '||', '~']

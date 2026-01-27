@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/workers/prerequisites.py
+# hypothesis_version: 6.151.2
+
+[100, 1024, '\nWARNINGS:', '--version', '.', 'docker', 'git', 'jq', 'podman', 'podman or docker', 'python3', 'python3.12+', 'version', 'zarf', '✗ git not found', '✗ jq not found']

@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/workers/python_env.py
+# hypothesis_version: 6.151.2
+
+['\nInstalled packages:', '--format=columns', '--format=freeze', '--upgrade', '-m', 'bin', 'hypothesis', 'install', 'jinja2', 'list', 'pip', 'pytest', 'python3', 'pyyaml', 'requests', 'rich', 'venv', '✓ pip exists', '✓ pip upgraded']

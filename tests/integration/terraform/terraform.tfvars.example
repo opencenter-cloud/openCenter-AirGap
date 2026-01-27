@@ -1,0 +1,17 @@
+# Example tfvars for air-gap integration tests
+
+auth_url         = "https://openstack.example.com:5000/v3"
+region           = "RegionOne"
+project_name     = "test-project"
+username         = "test-user"
+password         = "changeme"
+ssh_key_name     = "test-key"
+external_network = "public"
+
+# Optional overrides
+# internal_cidr     = "192.168.100.0/24"
+# bastion_flavor    = "m1.medium"
+# controller_flavor = "m1.large"
+# controller_count  = 3
+# worker_flavor     = "m1.large"
+# worker_count      = 2

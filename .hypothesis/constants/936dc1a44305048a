@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/workers/checksums.py
+# hypothesis_version: 6.151.2
+
+[8192, 'dist', 'rb', 'w']

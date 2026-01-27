@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/build.py
+# hypothesis_version: 6.151.2
+
+[0.0, '\nNext steps:', '\nTo resume:', '\nTo start fresh:', '%(message)s', '%Y-%m-%d %H:%M:%S', '--clean', '--force', '--from-step', '--max-parallel', '--no-parallel', '--non-interactive', '--resume', '--skip-step', '--skip-zarf', '.build-state.json', '.completed', '1', '=', 'Build Summary', 'Completed', 'Deleted state file', 'Duration', 'Failed', 'Metric', 'N', 'NON_INTERACTIVE', 'SKIP_ZARF', 'STEP_NAME', 'Skipped', 'Starting fresh build', 'Status', 'Total Steps', 'Value', '__main__', 'append', 'bold', 'build', 'cyan', 'green', 'red', 'skip_steps', 'store_true', 'w', '✓ SUCCESS', '✗ FAILED']

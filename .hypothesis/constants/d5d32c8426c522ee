@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/workers/github_token.py
+# hypothesis_version: 6.151.2
+
+['\nOptions:', '***', '...', '1', '2', '3', 'GITHUB_TOKEN', 'NON_INTERACTIVE', 'true', 'yes']

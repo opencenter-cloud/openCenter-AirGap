@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/workers/validation.py
+# hypothesis_version: 6.151.2
+
+[100, 1024, '*.asc', '*.sig', '*sbom*.json', '*sbom*.txt', '.md5', '.sha256', 'ZarfPackageConfig', 'components', 'config', 'dist', 'inspect', 'kind', 'metadata', 'name', 'package', 'r', 'version', 'zarf', 'zarf.yaml', '✓ Valid YAML syntax', '✓ zarf.yaml exists']

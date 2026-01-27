@@ -1,0 +1,4 @@
+# file: /opt/openCenter-AirGap/scripts/build/build_executor.py
+# hypothesis_version: 6.151.2
+
+[0.0, '*', ', ', '-', '.completed', '/bin/bash', '=', 'BUILD SUMMARY', 'Build Complete', 'Build Failed', 'Completed:', 'Dependency Graph:', 'Duration:', 'Failed:', 'Label', 'Skipped:', 'Status:', 'Steps executed:', 'Validation failed', 'Validation passed', 'Value', '[red]FAILED[/red]', 'bash', 'bold', 'build', 'cyan', 'green', 'python', 'red']

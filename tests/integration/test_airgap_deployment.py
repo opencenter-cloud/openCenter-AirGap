@@ -42,7 +42,8 @@ TEST_CONFIG = {
 class AirGapDeploymentTest:
     def __init__(self, test_dir: Path):
         self.test_dir = test_dir
-        self.terraform_dir = test_dir / "terraform"
+        # Use static Terraform files from tests/integration/terraform/
+        self.terraform_dir = Path(__file__).parent / "terraform"
         self.inventory_file = test_dir / "inventory.json"
         self.log_file = test_dir / "test.log"
         self.bastion_ip: Optional[str] = None
@@ -72,168 +73,31 @@ class AirGapDeploymentTest:
         return result
 
     def generate_terraform_config(self):
-        """Generate Terraform configuration for air-gap topology"""
-        self.log("Generating Terraform configuration")
+        """Generate Terraform tfvars for air-gap topology"""
+        self.log("Generating Terraform tfvars")
         
-        terraform_main = f'''
-terraform {{
-  required_version = ">= 1.6.0"
-  required_providers {{
-    openstack = {{
-      source  = "terraform-provider-openstack/openstack"
-      version = "~> 1.54.0"
-    }}
-  }}
-}}
+        # Use static Terraform files in tests/integration/terraform/
+        # Only generate tfvars with test-specific values
+        tfvars = f'''auth_url         = "{TEST_CONFIG["openstack"]["auth_url"]}"
+region           = "{TEST_CONFIG["openstack"]["region"]}"
+project_name     = "{TEST_CONFIG["openstack"]["project_name"]}"
+username         = "{TEST_CONFIG["openstack"]["username"]}"
+password         = "{TEST_CONFIG["openstack"]["password"]}"
+ssh_key_name     = "{TEST_CONFIG["ssh_key_name"]}"
+image            = "{TEST_CONFIG["image"]}"
+external_network = "{TEST_CONFIG["network"]["external_network"]}"
+internal_cidr    = "{TEST_CONFIG["network"]["internal_cidr"]}"
+dns_servers      = {json.dumps(TEST_CONFIG["network"]["dns_servers"])}
 
-provider "openstack" {{
-  auth_url    = "{TEST_CONFIG["openstack"]["auth_url"]}"
-  region      = "{TEST_CONFIG["openstack"]["region"]}"
-  tenant_name = "{TEST_CONFIG["openstack"]["project_name"]}"
-  user_name   = "{TEST_CONFIG["openstack"]["username"]}"
-  password    = "{TEST_CONFIG["openstack"]["password"]}"
-}}
-
-# Network resources
-resource "openstack_networking_network_v2" "airgap_network" {{
-  name           = "airgap-test-network"
-  admin_state_up = true
-}}
-
-resource "openstack_networking_subnet_v2" "airgap_subnet" {{
-  name       = "airgap-test-subnet"
-  network_id = openstack_networking_network_v2.airgap_network.id
-  cidr       = "{TEST_CONFIG["network"]["internal_cidr"]}"
-  ip_version = 4
-  dns_nameservers = {json.dumps(TEST_CONFIG["network"]["dns_servers"])}
-}}
-
-resource "openstack_networking_router_v2" "airgap_router" {{
-  name                = "airgap-test-router"
-  external_network_id = data.openstack_networking_network_v2.external.id
-}}
-
-resource "openstack_networking_router_interface_v2" "airgap_router_interface" {{
-  router_id = openstack_networking_router_v2.airgap_router.id
-  subnet_id = openstack_networking_subnet_v2.airgap_subnet.id
-}}
-
-data "openstack_networking_network_v2" "external" {{
-  name = "{TEST_CONFIG["network"]["external_network"]}"
-}}
-
-# Security groups
-resource "openstack_networking_secgroup_v2" "bastion_sg" {{
-  name        = "airgap-bastion-sg"
-  description = "Bastion security group - internet access allowed"
-}}
-
-resource "openstack_networking_secgroup_rule_v2" "bastion_ssh" {{
-  direction         = "ingress"
-  ethertype         = "IPv4"
-  protocol          = "tcp"
-  port_range_min    = 22
-  port_range_max    = 22
-  remote_ip_prefix  = "0.0.0.0/0"
-  security_group_id = openstack_networking_secgroup_v2.bastion_sg.id
-}}
-
-resource "openstack_networking_secgroup_rule_v2" "bastion_egress" {{
-  direction         = "egress"
-  ethertype         = "IPv4"
-  remote_ip_prefix  = "0.0.0.0/0"
-  security_group_id = openstack_networking_secgroup_v2.bastion_sg.id
-}}
-
-resource "openstack_networking_secgroup_v2" "airgap_sg" {{
-  name        = "airgap-nodes-sg"
-  description = "Air-gapped nodes - no internet access"
-}}
-
-resource "openstack_networking_secgroup_rule_v2" "airgap_internal" {{
-  direction         = "ingress"
-  ethertype         = "IPv4"
-  remote_ip_prefix  = "{TEST_CONFIG["network"]["internal_cidr"]}"
-  security_group_id = openstack_networking_secgroup_v2.airgap_sg.id
-}}
-
-resource "openstack_networking_secgroup_rule_v2" "airgap_egress_internal" {{
-  direction         = "egress"
-  ethertype         = "IPv4"
-  remote_ip_prefix  = "{TEST_CONFIG["network"]["internal_cidr"]}"
-  security_group_id = openstack_networking_secgroup_v2.airgap_sg.id
-}}
-
-# Bastion instance
-resource "openstack_compute_instance_v2" "bastion" {{
-  name            = "airgap-bastion"
-  flavor_name     = "{TEST_CONFIG["topology"]["bastion"]["flavor"]}"
-  image_name      = "{TEST_CONFIG["image"]}"
-  key_pair        = "{TEST_CONFIG["ssh_key_name"]}"
-  security_groups = [openstack_networking_secgroup_v2.bastion_sg.name]
-
-  network {{
-    uuid = openstack_networking_network_v2.airgap_network.id
-  }}
-}}
-
-resource "openstack_networking_floatingip_v2" "bastion_fip" {{
-  pool = "{TEST_CONFIG["network"]["external_network"]}"
-}}
-
-resource "openstack_compute_floatingip_associate_v2" "bastion_fip_assoc" {{
-  floating_ip = openstack_networking_floatingip_v2.bastion_fip.address
-  instance_id = openstack_compute_instance_v2.bastion.id
-}}
-
-# Controller instances
-resource "openstack_compute_instance_v2" "controllers" {{
-  count           = {TEST_CONFIG["topology"]["controllers"]["count"]}
-  name            = "airgap-controller-${{count.index + 1}}"
-  flavor_name     = "{TEST_CONFIG["topology"]["controllers"]["flavor"]}"
-  image_name      = "{TEST_CONFIG["image"]}"
-  key_pair        = "{TEST_CONFIG["ssh_key_name"]}"
-  security_groups = [openstack_networking_secgroup_v2.airgap_sg.name]
-
-  network {{
-    uuid = openstack_networking_network_v2.airgap_network.id
-  }}
-}}
-
-# Worker instances
-resource "openstack_compute_instance_v2" "workers" {{
-  count           = {TEST_CONFIG["topology"]["workers"]["count"]}
-  name            = "airgap-worker-${{count.index + 1}}"
-  flavor_name     = "{TEST_CONFIG["topology"]["workers"]["flavor"]}"
-  image_name      = "{TEST_CONFIG["image"]}"
-  key_pair        = "{TEST_CONFIG["ssh_key_name"]}"
-  security_groups = [openstack_networking_secgroup_v2.airgap_sg.name]
-
-  network {{
-    uuid = openstack_networking_network_v2.airgap_network.id
-  }}
-}}
-
-# Outputs
-output "bastion_public_ip" {{
-  value = openstack_networking_floatingip_v2.bastion_fip.address
-}}
-
-output "bastion_private_ip" {{
-  value = openstack_compute_instance_v2.bastion.access_ip_v4
-}}
-
-output "controller_ips" {{
-  value = openstack_compute_instance_v2.controllers[*].access_ip_v4
-}}
-
-output "worker_ips" {{
-  value = openstack_compute_instance_v2.workers[*].access_ip_v4
-}}
+bastion_flavor    = "{TEST_CONFIG["topology"]["bastion"]["flavor"]}"
+controller_flavor = "{TEST_CONFIG["topology"]["controllers"]["flavor"]}"
+controller_count  = {TEST_CONFIG["topology"]["controllers"]["count"]}
+worker_flavor     = "{TEST_CONFIG["topology"]["workers"]["flavor"]}"
+worker_count      = {TEST_CONFIG["topology"]["workers"]["count"]}
 '''
         
-        self.terraform_dir.mkdir(parents=True, exist_ok=True)
-        (self.terraform_dir / "main.tf").write_text(terraform_main)
+        (self.terraform_dir / "terraform.tfvars").write_text(tfvars)
+        self.log(f"Terraform tfvars written to {self.terraform_dir}")
 
     def provision_infrastructure(self):
         """Provision OpenStack infrastructure via Terraform"""
