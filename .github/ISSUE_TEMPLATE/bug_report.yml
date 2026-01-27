@@ -1,0 +1,89 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in openCenter AirGap
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Bug Report
+        
+        Provide details to help us reproduce and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Clear description of the bug
+      placeholder: What went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Exact steps to trigger the bug
+      placeholder: |
+        1. Run `make build`
+        2. Execute `scripts/build/collect_assets.sh`
+        3. Observe error in logs
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+      placeholder: Build completes successfully with package in dist/
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Build fails with validation error
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: System details
+      placeholder: |
+        - OS: Ubuntu 24.04 LTS
+        - Python: 3.10.12
+        - Zarf: 0.32.0
+        - Terraform: 1.6.6
+      value: |
+        - OS: 
+        - Python: 
+        - Zarf: 
+        - Terraform: 
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log output (redact secrets)
+      placeholder: Paste error messages, stack traces, or log excerpts
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Config files, workarounds, related issues
+      placeholder: Any other information that might help
+    validations:
+      required: false

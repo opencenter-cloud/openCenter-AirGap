@@ -1,0 +1,88 @@
+name: Feature Request
+description: Propose a new feature or enhancement for openCenter AirGap
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Feature Request
+        
+        Describe the feature you'd like to see in openCenter AirGap.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve?
+      placeholder: Describe the pain point or limitation you're experiencing
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should this feature work?
+      placeholder: |
+        Describe your proposed implementation:
+        - What should the feature do?
+        - How should users interact with it?
+        - What should the output or result be?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other approaches did you consider?
+      placeholder: |
+        List alternative solutions or workarounds:
+        - Alternative 1: ...
+        - Alternative 2: ...
+        - Why these don't fully solve the problem
+    validations:
+      required: false
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case
+      description: Describe a concrete scenario where this feature would be used
+      placeholder: |
+        Example scenario:
+        1. User wants to...
+        2. They would use this feature to...
+        3. The result would be...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to your workflow?
+      options:
+        - "Critical - Blocking current work"
+        - "High - Significant impact on productivity"
+        - "Medium - Would improve workflow"
+        - "Low - Nice to have"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other information that might help
+      placeholder: |
+        - Related issues or PRs
+        - Links to documentation
+        - Screenshots or diagrams
+        - Impact on existing functionality
+    validations:
+      required: false
+

@@ -1,0 +1,68 @@
+# CODEOWNERS
+# 
+# Code ownership for openCenter AirGap repository.
+# 
+# Each line is a file pattern followed by one or more owners.
+# Owners are referenced by GitHub username, email, or team name.
+# Last matching pattern takes precedence.
+#
+# Syntax: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+* @platform-team
+
+# Build system and orchestration
+/scripts/build/ @platform-team @build-engineers
+/scripts/deploy/ @platform-team @sre-team
+/scripts/lib/ @platform-team
+
+# Configuration and version management
+/config/ @platform-team @security-team
+/config/versions.env @platform-team @release-managers
+/config/schemas/ @platform-team
+
+# Python package and core libraries
+/src/ @platform-team @build-engineers
+/pyproject.toml @platform-team @build-engineers
+
+# Infrastructure as Code
+/assets/terraform/ @platform-team @infrastructure-team
+/assets/kubespray/ @platform-team @kubernetes-team
+
+# GitOps and manifests
+/assets/gitops-base/ @platform-team @gitops-team
+
+# Documentation
+/docs/ @platform-team @tech-writers
+/docs/reference/ @platform-team
+/docs/tutorials/ @tech-writers
+/docs/how-to/ @tech-writers
+/docs/explanation/ @tech-writers
+/README.md @platform-team @tech-writers
+
+# Testing
+/tests/ @platform-team @qa-team
+/tests/unit/ @platform-team @build-engineers
+/tests/integration/ @platform-team @qa-team
+/tests/property/ @platform-team @qa-team
+
+# Examples and templates
+/examples/ @platform-team @tech-writers
+
+# CI/CD and automation
+/.github/ @platform-team @devops-team
+/.github/workflows/ @platform-team @devops-team
+
+# Security and compliance
+/SECURITY.md @security-team
+/.secrets/ @security-team
+/config/firewall-whitelist.* @security-team @network-team
+
+# Zarf packaging
+/zarf.yaml @platform-team @build-engineers
+/zarf.yaml.template @platform-team @build-engineers
+
+# Project governance
+/CONTRIBUTING.md @platform-team
+/CODEOWNERS @platform-team
+/.editorconfig @platform-team
