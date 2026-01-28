@@ -130,9 +130,17 @@ STEPS: List[StepDefinition] = [
         timeout_seconds=10,
     ),
     StepDefinition(
+        name="generate_image_lists",
+        description="Generate container image lists from repositories",
+        dependencies=["setup_python_env"],
+        worker_type=WorkerType.BASH,
+        worker_path="scripts/build/generate_image_lists.sh",
+        timeout_seconds=600,  # 10 min for repo cloning + scanning
+    ),
+    StepDefinition(
         name="collect_opencenter_assets",
         description="Collect openCenter platform assets (images, configs)",
-        dependencies=["check_github_token"],
+        dependencies=["check_github_token", "generate_image_lists"],
         worker_type=WorkerType.BASH,
         worker_path="scripts/build/collect_opencenter_assets.sh",
         timeout_seconds=3600,  # 1 hour for image downloads
