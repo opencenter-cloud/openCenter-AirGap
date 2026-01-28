@@ -25,14 +25,24 @@
       "notes": "Core tool for asset discovery and download"
     },
     {
-      "name": "Genestack (gitops-base)",
-      "url": "https://github.com/rackerlabs/genestack",
-      "clone_url": "https://github.com/rackerlabs/genestack.git",
+      "name": "openCenter GitOps Base",
+      "url": "https://github.com/rackerlabs/openCenter-gitops-base",
+      "clone_url": "https://github.com/rackerlabs/openCenter-gitops-base.git",
       "branch": "main",
       "purpose": "openCenter platform service definitions",
       "required": true,
-      "clone_to": "assets/gitops-base/",
-      "notes": "Contains 20+ platform service manifests"
+      "clone_to": "assets/opencenter-gitops-base/",
+      "notes": "Primary source for openCenter platform service manifests"
+    },
+    {
+      "name": "Genestack",
+      "url": "https://github.com/rackerlabs/genestack",
+      "clone_url": "https://github.com/rackerlabs/genestack.git",
+      "branch": "main",
+      "purpose": "Alternative platform service definitions",
+      "required": false,
+      "clone_to": "assets/genestack/",
+      "notes": "Alternative/additional platform service manifests"
     },
     {
       "name": "RMPK Environments",

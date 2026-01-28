@@ -1,10 +1,10 @@
 #!/bin/bash
 # Update openCenter Platform Service Image List
 #
-# Scans gitops-base assets and generates the complete image list
+# Scans opencenter-gitops-base assets and generates the complete image list
 # for openCenter platform services (20+ services).
 #
-# This script should be run whenever gitops-base is updated or
+# This script should be run whenever opencenter-gitops-base is updated or
 # when preparing a new build.
 
 set -euo pipefail
@@ -12,7 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 GENERATOR="${SCRIPT_DIR}/generate_opencenter_images.py"
-GITOPS_BASE="${PROJECT_ROOT}/assets/gitops-base"
+GITOPS_BASE="${PROJECT_ROOT}/assets/opencenter-gitops-base"
 OUTPUT_FILE="${PROJECT_ROOT}/config/opencenter-images.txt"
 KUBESPRAY_OFFLINE_IMAGES="${PROJECT_ROOT}/build/kubespray-offline/imagelists/additional_images.txt"
 
@@ -36,8 +36,8 @@ log_error() {
 
 # Check prerequisites
 if [ ! -d "$GITOPS_BASE" ]; then
-    log_error "gitops-base not found at: $GITOPS_BASE"
-    log_error "Please clone gitops-base to assets/gitops-base"
+    log_error "opencenter-gitops-base not found at: $GITOPS_BASE"
+    log_error "Please clone opencenter-gitops-base to assets/opencenter-gitops-base"
     exit 1
 fi
 
@@ -50,7 +50,7 @@ log_info "Generating openCenter platform service image list..."
 echo ""
 
 # Generate image list
-if ! python3 "$GENERATOR" --gitops-base "$GITOPS_BASE" --output "$OUTPUT_FILE" --verbose; then
+if ! python3 "$GENERATOR" --opencenter-gitops-base "$GITOPS_BASE" --output "$OUTPUT_FILE" --verbose; then
     log_error "Failed to generate image list"
     exit 1
 fi
