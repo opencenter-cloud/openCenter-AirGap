@@ -12,6 +12,7 @@ from pathlib import Path
 
 class WorkerType(Enum):
     """Type of worker that executes a build step."""
+
     BASH = "bash"
     PYTHON = "python"
 
@@ -19,7 +20,7 @@ class WorkerType(Enum):
 @dataclass
 class StepDefinition:
     """Definition of a build step.
-    
+
     Attributes:
         name: Unique identifier for the step
         description: Human-readable description
@@ -33,6 +34,7 @@ class StepDefinition:
         input_files: List of input file paths to check for changes (relative to project root)
         output_files: List of output file/directory paths to check for existence (relative to project root)
     """
+
     name: str
     description: str
     dependencies: List[str]
@@ -59,11 +61,10 @@ try:
     from workers.prerequisites import check_prerequisites_worker
     from workers.python_env import setup_python_env_worker, validate_python_env
     from workers.github_token import check_github_token_worker
-    from workers.merge_images import merge_opencenter_images_worker
     from workers.validation import (
         validate_versions_worker,
         validate_zarf_yaml_worker,
-        validate_build_outputs_worker
+        validate_build_outputs_worker,
     )
     from workers.checksums import generate_checksums_worker
 except ImportError:
@@ -82,10 +83,6 @@ except ImportError:
 
     def check_github_token_worker(project_root: Path) -> bool:
         """Check GitHub token."""
-        raise NotImplementedError("Worker not yet implemented")
-
-    def merge_opencenter_images_worker(project_root: Path) -> bool:
-        """Merge openCenter images with kubespray-offline."""
         raise NotImplementedError("Worker not yet implemented")
 
     def validate_versions_worker(project_root: Path) -> bool:
@@ -113,9 +110,8 @@ STEPS: List[StepDefinition] = [
         dependencies=[],
         worker_type=WorkerType.PYTHON,
         worker_func=check_prerequisites_worker,
-        timeout_seconds=30
+        timeout_seconds=30,
     ),
-    
     StepDefinition(
         name="setup_python_env",
         description="Setup Python virtual environment and install dependencies",
@@ -123,99 +119,72 @@ STEPS: List[StepDefinition] = [
         worker_type=WorkerType.PYTHON,
         worker_func=setup_python_env_worker,
         validation_func=validate_python_env,
-        timeout_seconds=120
+        timeout_seconds=120,
     ),
-    
     StepDefinition(
         name="check_github_token",
         description="Verify GITHUB_TOKEN environment variable",
         dependencies=["setup_python_env"],
         worker_type=WorkerType.PYTHON,
         worker_func=check_github_token_worker,
-        timeout_seconds=10
+        timeout_seconds=10,
     ),
-    
     StepDefinition(
         name="collect_opencenter_assets",
         description="Collect openCenter platform assets (images, configs)",
         dependencies=["check_github_token"],
         worker_type=WorkerType.BASH,
         worker_path="scripts/build/collect_opencenter_assets.sh",
-        timeout_seconds=3600  # 1 hour for image downloads
+        timeout_seconds=3600,  # 1 hour for image downloads
     ),
-    
     StepDefinition(
-        name="clone_kubespray_offline",
-        description="Clone or update kubespray-offline repository",
+        name="collect_kubespray_offline",
+        description="Collect kubespray-offline assets (clone + download)",
         dependencies=["setup_python_env"],
         worker_type=WorkerType.BASH,
         worker_path="scripts/build/collect_kubespray_offline.sh",
-        timeout_seconds=300
+        timeout_seconds=300,
     ),
-    
-    StepDefinition(
-        name="merge_opencenter_images",
-        description="Merge openCenter images with kubespray-offline image list",
-        dependencies=["clone_kubespray_offline"],
-        worker_type=WorkerType.PYTHON,
-        worker_func=merge_opencenter_images_worker,
-        timeout_seconds=30
-    ),
-    
-    StepDefinition(
-        name="run_kubespray_offline",
-        description="Execute kubespray-offline download-all.sh to collect K8s assets",
-        dependencies=["collect_opencenter_assets", "merge_opencenter_images"],
-        worker_type=WorkerType.BASH,
-        worker_path="scripts/build/run_kubespray_offline.sh",
-        timeout_seconds=7200  # 2 hours for all downloads
-    ),
-    
     StepDefinition(
         name="organize_assets",
         description="Organize assets for Zarf packaging",
-        dependencies=["run_kubespray_offline"],
+        dependencies=["collect_kubespray_offline"],
         worker_type=WorkerType.BASH,
         worker_path="scripts/build/organize_assets_for_zarf.sh",
-        timeout_seconds=600
+        timeout_seconds=600,
     ),
-    
     StepDefinition(
         name="validate_versions",
         description="Validate version pinning in config/versions.env",
         dependencies=["organize_assets"],
         worker_type=WorkerType.PYTHON,
         worker_func=validate_versions_worker,
-        timeout_seconds=30
+        timeout_seconds=30,
     ),
-    
     StepDefinition(
         name="validate_zarf_yaml",
         description="Validate zarf.yaml syntax and structure",
         dependencies=["validate_versions"],
         worker_type=WorkerType.PYTHON,
         worker_func=validate_zarf_yaml_worker,
-        timeout_seconds=30
+        timeout_seconds=30,
     ),
-    
     StepDefinition(
         name="create_zarf_package",
         description="Create Zarf package with all assets",
         dependencies=["validate_zarf_yaml"],
         worker_type=WorkerType.BASH,
         worker_path="scripts/build/create_zarf_package.sh",
-        timeout_seconds=3600  # 1 hour for package creation
+        timeout_seconds=3600,  # 1 hour for package creation
     ),
-    
     StepDefinition(
         name="generate_checksums",
         description="Generate SHA256 and MD5 checksums for Zarf package",
         dependencies=["create_zarf_package"],
         worker_type=WorkerType.PYTHON,
         worker_func=generate_checksums_worker,
-        timeout_seconds=300
+        timeout_seconds=300,
     ),
-    
     StepDefinition(
         name="sign_package",
         description="Sign Zarf package with Cosign (optional)",
@@ -223,35 +192,33 @@ STEPS: List[StepDefinition] = [
         worker_type=WorkerType.BASH,
         worker_path="scripts/build/sign_package.sh",
         optional=True,
-        timeout_seconds=60
+        timeout_seconds=60,
     ),
-    
     StepDefinition(
         name="inspect_package",
         description="Generate SBOM and inspect Zarf package",
         dependencies=["create_zarf_package"],
         worker_type=WorkerType.BASH,
         worker_path="scripts/build/inspect_package.sh",
-        timeout_seconds=300
+        timeout_seconds=300,
     ),
-    
     StepDefinition(
         name="validate_build_outputs",
         description="Validate final build outputs and package integrity",
         dependencies=["generate_checksums", "sign_package", "inspect_package"],
         worker_type=WorkerType.PYTHON,
         worker_func=validate_build_outputs_worker,
-        timeout_seconds=60
+        timeout_seconds=60,
     ),
 ]
 
 
 def get_step_by_name(step_name: str) -> Optional[StepDefinition]:
     """Get step definition by name.
-    
+
     Args:
         step_name: Name of the step to retrieve
-        
+
     Returns:
         StepDefinition if found, None otherwise
     """
@@ -263,7 +230,7 @@ def get_step_by_name(step_name: str) -> Optional[StepDefinition]:
 
 def get_all_step_names() -> List[str]:
     """Get list of all step names.
-    
+
     Returns:
         List of step names in definition order
     """
@@ -272,33 +239,27 @@ def get_all_step_names() -> List[str]:
 
 def validate_step_definitions() -> None:
     """Validate all step definitions.
-    
+
     Raises:
         ValueError: If any step definition is invalid
     """
     step_names = set(get_all_step_names())
-    
+
     # Check for duplicate step names
     if len(step_names) != len(STEPS):
         raise ValueError("Duplicate step names detected")
-    
+
     # Validate dependencies exist
     for step in STEPS:
         for dep in step.dependencies:
             if dep not in step_names:
-                raise ValueError(
-                    f"Step '{step.name}' has non-existent dependency: '{dep}'"
-                )
-    
+                raise ValueError(f"Step '{step.name}' has non-existent dependency: '{dep}'")
+
     # Validate worker references
     for step in STEPS:
         if step.worker_type == WorkerType.BASH:
             if not step.worker_path:
-                raise ValueError(
-                    f"Step '{step.name}' is BASH type but has no worker_path"
-                )
+                raise ValueError(f"Step '{step.name}' is BASH type but has no worker_path")
         elif step.worker_type == WorkerType.PYTHON:
             if not step.worker_func:
-                raise ValueError(
-                    f"Step '{step.name}' is PYTHON type but has no worker_func"
-                )
+                raise ValueError(f"Step '{step.name}' is PYTHON type but has no worker_func")

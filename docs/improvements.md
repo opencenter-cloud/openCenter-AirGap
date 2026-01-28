@@ -473,7 +473,7 @@ def verify_terraform_mirror(state: BuildState) -> StepResult:
 
 ```bash
 # 1. Generate image list
-python3 scripts/build/generate_complete_image_lists.sh
+./scripts/build/generate_image_lists.sh
 
 # 2. Generate zarf.yaml
 python3 scripts/build/generate_zarf_yaml.py
