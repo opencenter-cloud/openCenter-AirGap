@@ -1,5 +1,6 @@
 #!/bin/bash
 # Generate Complete Image Lists from All Sources
+# shellcheck disable=SC2181,SC2155,SC2126
 #
 # Scans multiple sources for container images:
 # 1. kubespray repository (https://github.com/kubernetes-sigs/kubespray)
@@ -59,38 +60,51 @@ log_step() {
 check_prerequisites() {
     log_step "Checking prerequisites..."
 
-    local missing=0
-
-    if [ ! -d "$OPENCENTER_GITOPS_BASE" ] && [ ! -d "$GENESTACK" ]; then
-        log_error "Neither openCenter-gitops-base nor genestack found"
-        log_error "Clone at least one:"
-        log_error "  git clone https://github.com/rackerlabs/openCenter-gitops-base.git assets/opencenter-gitops-base"
-        log_error "  git clone https://github.com/rackerlabs/genestack.git assets/genestack"
-        missing=1
-    fi
-
-    if [ ! -d "$KUBESPRAY_OFFLINE" ]; then
-        log_warn "kubespray-offline not found: $KUBESPRAY_OFFLINE"
-        log_warn "Clone: git clone https://github.com/kubespray-offline/kubespray-offline.git build/kubespray-offline"
-        log_warn "Will skip kubespray-offline image extraction"
-    fi
-
-    if [ ! -d "$KUBESPRAY_REPO" ]; then
-        log_warn "kubespray repo not found: $KUBESPRAY_REPO"
-        log_warn "Clone: git clone https://github.com/kubernetes-sigs/kubespray.git assets/kubespray/kubespray-master"
-        log_warn "Will skip kubespray repo scanning"
-    fi
-
     if ! command -v python3 &> /dev/null; then
         log_error "python3 not found"
-        missing=1
+        return 1
     fi
 
-    if [ $missing -eq 1 ]; then
+    if ! command -v git &> /dev/null; then
+        log_error "git not found"
         return 1
     fi
 
     log_info "Prerequisites OK"
+    return 0
+}
+
+clone_repositories() {
+    log_step "Cloning missing repositories..."
+
+    # Clone genestack if neither it nor opencenter-gitops-base exists
+    if [ ! -d "$OPENCENTER_GITOPS_BASE" ] && [ ! -d "$GENESTACK" ]; then
+        log_info "Cloning genestack (primary platform service repository)..."
+        git clone --depth 1 https://github.com/rackerlabs/genestack.git "$GENESTACK"
+        if [ $? -ne 0 ]; then
+            log_error "Failed to clone genestack"
+            return 1
+        fi
+        log_info "Cloned genestack successfully"
+    fi
+
+    # Clone kubespray if not exists
+    if [ ! -d "$KUBESPRAY_REPO" ]; then
+        log_info "Cloning kubespray repository..."
+        mkdir -p "$(dirname "$KUBESPRAY_REPO")"
+        git clone --depth 1 https://github.com/kubernetes-sigs/kubespray.git "$KUBESPRAY_REPO"
+        if [ $? -ne 0 ]; then
+            log_warn "Failed to clone kubespray, will skip kubespray scanning"
+        else
+            log_info "Cloned kubespray successfully"
+        fi
+    fi
+
+    # Note: kubespray-offline is cloned by collect_kubespray_offline.sh
+    if [ ! -d "$KUBESPRAY_OFFLINE" ]; then
+        log_info "kubespray-offline will be cloned by collect_kubespray_offline.sh"
+    fi
+
     return 0
 }
 
@@ -312,6 +326,13 @@ main() {
 
     if ! check_prerequisites; then
         log_error "Prerequisites check failed"
+        exit 1
+    fi
+
+    echo ""
+
+    if ! clone_repositories; then
+        log_error "Failed to clone required repositories"
         exit 1
     fi
 

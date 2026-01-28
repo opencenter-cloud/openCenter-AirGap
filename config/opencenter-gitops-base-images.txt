@@ -1,0 +1,4 @@
+# openCenter GitOps Base Images
+# Source: https://github.com/rackerlabs/openCenter-gitops-base
+# Scanned from openCenter-gitops-base repository
+# These are openCenter platform service images
