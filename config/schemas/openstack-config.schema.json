@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencenter.io/schemas/openstack-config.schema.json",
+  "title": "OpenStack Configuration",
+  "description": "OpenStack credentials and VM configuration for Terraform provisioning",
+  "type": "object",
+  "required": [
+    "auth_url",
+    "project_name",
+    "username",
+    "password",
+    "region",
+    "control_plane_count",
+    "worker_count",
+    "flavor",
+    "image",
+    "network",
+    "key_pair"
+  ],
+  "properties": {
+    "auth_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://",
+      "description": "OpenStack Keystone authentication URL",
+      "examples": ["https://openstack.example.com:5000/v3"]
+    },
+    "project_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenStack project (tenant) name"
+    },
+    "username": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenStack username"
+    },
+    "password": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenStack password (store securely, use environment variable in production)"
+    },
+    "region": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenStack region",
+      "examples": ["RegionOne", "us-east-1"]
+    },
+    "domain_name": {
+      "type": "string",
+      "default": "Default",
+      "description": "OpenStack domain name"
+    },
+    "control_plane_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7,
+      "description": "Number of control plane nodes (odd number recommended)"
+    },
+    "worker_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Number of worker nodes"
+    },
+    "flavor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenStack flavor (VM size)",
+      "examples": ["m1.large", "m1.xlarge"]
+    },
+    "image": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenStack image name (must be Ubuntu 24.04 LTS)",
+      "examples": ["ubuntu-24.04", "Ubuntu-24.04-LTS"]
+    },
+    "network": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenStack network name for VM attachment"
+    },
+    "floating_ip_pool": {
+      "type": "string",
+      "description": "Floating IP pool for external access (optional)"
+    },
+    "key_pair": {
+      "type": "string",
+      "minLength": 1,
+      "description": "SSH key pair name (must exist in OpenStack)"
+    },
+    "security_groups": {
+      "type": "array",
+      "description": "Security groups to attach to VMs",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "volume_size": {
+      "type": "integer",
+      "minimum": 20,
+      "maximum": 1000,
+      "default": 50,
+      "description": "Root volume size in GB"
+    },
+    "availability_zone": {
+      "type": "string",
+      "description": "OpenStack availability zone"
+    }
+  },
+  "additionalProperties": false
+}

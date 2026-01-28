@@ -92,6 +92,7 @@ Thumbs.db
 *.crt
 secrets/
 credentials/
+.secrets/
 
 # Temporary files
 tmp/

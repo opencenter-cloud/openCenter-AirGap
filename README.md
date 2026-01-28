@@ -1,5 +1,9 @@
 # openCenter AirGap
 
+![Test Coverage](https://img.shields.io/badge/coverage-72%25-yellow)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-Apache%202.0-green)
+
 Production-grade Kubernetes deployment for completely disconnected environments. Single cryptographically verifiable artifact containing all dependencies for infrastructure provisioning, cluster bootstrap, and core services.
 
 ## Architecture
@@ -76,8 +80,10 @@ Production-grade Kubernetes deployment for completely disconnected environments.
 
 **Zone A (Build)**:
 - Ubuntu 24.04 with internet access
-- Python 3.12+
-- Podman or Docker
+- Python 3.10+
+- **Skopeo** (container image operations) - `sudo apt-get install skopeo`
+- **Podman** (container runtime) - `sudo apt-get install podman`
+- **Trivy** (vulnerability scanning) - See installation below
 - Zarf CLI
 - 100GB+ disk space
 
@@ -85,6 +91,29 @@ Production-grade Kubernetes deployment for completely disconnected environments.
 - Bastion host: Ubuntu 24.04, 100GB disk, podman
 - Target nodes: Ubuntu 24.04, SSH access
 - Network connectivity between bastion and nodes
+
+**Container Tools**:
+```bash
+# Install Skopeo and Podman (Ubuntu 24.04)
+sudo apt-get update
+sudo apt-get install -y skopeo podman
+
+# Verify installation
+skopeo --version  # Should show 1.13.x+
+podman --version  # Should show 4.3.x+
+
+# Install Trivy (vulnerability scanner)
+curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+# Verify Trivy installation
+trivy --version  # Should show latest stable version
+```
+
+**Why Skopeo and Podman?**
+- **Daemonless**: No background services required
+- **Rootless**: Can run without root privileges
+- **Air-gap optimized**: Direct registry-to-directory copies
+- **Docker-free**: No Docker daemon dependency
 
 ### Build (Zone A)
 

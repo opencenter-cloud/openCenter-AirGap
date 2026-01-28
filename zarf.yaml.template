@@ -1,0 +1,130 @@
+kind: ZarfPackageConfig
+metadata:
+  name: opencenter-airgap
+  description: Air-gapped Kubernetes cluster deployment with Kubespray
+  version: 1.0.0
+  architecture: amd64
+  authors: openCenter Team
+  url: https://github.com/opencenter/opencenter-airgap
+  vendor: openCenter
+  # Note: This file is generated from zarf.yaml.template
+  # Do not edit directly - run scripts/build/generate_zarf_yaml.py
+variables:
+- name: DEPLOYMENT_MODE
+  description: 'Deployment mode: baremetal or openstack'
+  default: baremetal
+  prompt: false
+- name: BASTION_IP
+  description: IP address of bastion host
+  default: ""
+  prompt: true
+- name: SSH_USER
+  description: SSH user for node access
+  default: deployer
+  prompt: false
+- name: INSTALL_PATH
+  description: Installation directory on bastion
+  default: /opt/opencenter
+  prompt: false
+- name: REGISTRY_PORT
+  description: Local registry port
+  default: '35000'
+  prompt: false
+- name: NGINX_PORT
+  description: Nginx file server port
+  default: '80'
+  prompt: false
+components:
+# Component 1: bootstrap-tools
+# Dependencies: None
+# Independence: Fully independent, can deploy alone
+# Provides: Python venv, deployment scripts
+- name: bootstrap-tools
+  description: Python environment and deployment scripts
+  required: true
+  files:
+  - source: assets/python-wheels/
+    target: '###ZARF_VAR_INSTALL_PATH###/python-wheels/'
+    executable: false
+  - source: assets/target-scripts/
+    target: '###ZARF_VAR_INSTALL_PATH###/target-scripts/'
+    executable: true
+  actions:
+    onDeploy:
+      after:
+      - cmd: 'python3 -m venv ###ZARF_VAR_INSTALL_PATH###/venv'
+        description: Create Python virtual environment
+      - cmd: '###ZARF_VAR_INSTALL_PATH###/venv/bin/pip install --no-index --find-links=###ZARF_VAR_INSTALL_PATH###/python-wheels/
+          ansible jinja2 netaddr'
+        description: Install Python dependencies
+# Component 2: terraform-providers
+# Dependencies: None
+# Independence: Fully independent, can deploy alone or skip for bare-metal
+# Provides: Terraform provider mirror, .terraformrc config
+- name: terraform-providers
+  description: Terraform provider filesystem mirror for OpenStack
+  required: false
+  files:
+  - source: assets/terraform-mirror/
+    target: '###ZARF_VAR_INSTALL_PATH###/terraform-mirror/'
+    executable: false
+  actions:
+    onDeploy:
+      after:
+      - cmd: 'mkdir -p ###ZARF_VAR_INSTALL_PATH###/terraform-cache'
+        description: Create Terraform cache directory
+      - cmd: "cat > /root/.terraformrc << 'EOF'\n\nplugin_cache_dir   = \"###ZARF_VAR_INSTALL_PATH###/terraform-cache\"\n\
+          disable_checkpoint = true\n\nprovider_installation {\n  filesystem_mirror {\n    path    = \"###ZARF_VAR_INSTALL_PATH###/terraform-mirror\"\
+          \n    include = [\"*/*\"]\n  }\n  direct {\n    exclude = [\"*/*\"]\n  }\n}\n\nEOF"
+        description: Configure Terraform filesystem mirror
+# Component 3: kubespray-core
+# Dependencies: bootstrap-tools (logical, for Python venv used later by Kubespray)
+# Independence: Can deploy independently (only copies files, no runtime dependency)
+# Provides: Kubespray playbooks, K8s binaries, package repos
+- name: kubespray-core
+  description: Kubespray playbooks, K8s binaries, and package repositories
+  required: true
+  files:
+  - source: assets/kubespray/
+    target: '###ZARF_VAR_INSTALL_PATH###/kubespray/'
+    executable: false
+  - source: assets/k8s-binaries/
+    target: '###ZARF_VAR_INSTALL_PATH###/k8s-binaries/'
+    executable: false
+  - source: assets/repos/
+    target: '###ZARF_VAR_INSTALL_PATH###/repos/'
+    executable: false
+  - source: assets/playbook/
+    target: '###ZARF_VAR_INSTALL_PATH###/playbook/'
+    executable: false
+# Component 4: k8s-images
+# Dependencies: None
+# Independence: Fully independent, can deploy alone (skips if no images)
+# Provides: Local registry, K8s and openCenter service images
+- name: k8s-images
+  description: Container images for Kubernetes and core services (optional until collected)
+  required: false
+  actions:
+    onDeploy:
+      before:
+      - cmd: |
+          if [ -d "###ZARF_VAR_INSTALL_PATH###/images" ] && [ "$(ls -A ###ZARF_VAR_INSTALL_PATH###/images 2>/dev/null)" ]; then
+            podman ps -q -f name=local-registry | grep . || podman run -d -p ###ZARF_VAR_REGISTRY_PORT###:5000 -v /var/lib/registry:/var/lib/registry --restart=always --name local-registry registry:2.8.3
+            ###ZARF_VAR_INSTALL_PATH###/target-scripts/load-push-all-images.sh
+          else
+            echo "No images directory found, skipping image loading"
+          fi
+        description: Load images if available
+# Component 5: deploy-cluster
+# Dependencies: bootstrap-tools (needs target-scripts), kubespray-core (needs playbooks)
+# Independence: Cannot deploy independently, requires prerequisites
+# Provides: Bastion setup orchestration (nginx, registry, Python venv)
+- name: deploy-cluster
+  description: Cluster deployment orchestration
+  required: true
+  actions:
+    onDeploy:
+      after:
+      - cmd: '###ZARF_VAR_INSTALL_PATH###/target-scripts/setup-all.sh'
+        description: Setup bastion services (nginx, registry, Python)
+        dir: '###ZARF_VAR_INSTALL_PATH###'

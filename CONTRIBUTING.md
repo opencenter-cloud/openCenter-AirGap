@@ -1,7 +1,7 @@
 # Contributing to openCenter AirGap
 
-**doc_type**: how-to  
-**audience**: Platform Engineers, Developers  
+**doc_type**: how-to
+**audience**: Platform Engineers, Developers
 **scope**: Development environment setup, testing, and contribution workflow
 
 This guide covers setting up your development environment, running tests, and submitting changes to openCenter AirGap.
@@ -144,10 +144,10 @@ Example:
 ```python
 def validate_config(config: dict[str, str]) -> None:
     """Validate configuration against schema.
-    
+
     Args:
         config: Configuration dictionary to validate
-        
+
     Raises:
         ValidationError: If configuration is invalid
     """
@@ -183,18 +183,21 @@ def validate_config(config: dict[str, str]) -> None:
 - Run `shellcheck` on all Bash scripts
 - Fix all warnings before committing
 
-### Language Decision Matrix
+### Language Selection
 
-| Use Case | Language | Rationale |
-|:---------|:---------|:----------|
-| Data transformation (JSON/YAML) | Python | Better parsing libraries |
-| Complex logic (validation, state) | Python | Easier to test and maintain |
-| File operations (copy, move) | Bash | Native shell efficiency |
-| Tool orchestration (git, podman) | Bash | Direct command invocation |
-| API interactions | Python | Better HTTP libraries |
-| Text processing (sed, awk) | Bash | Native text tools |
+When choosing between Python and Bash, follow the decision matrix in [docs/reference/coding-standards.md](docs/reference/coding-standards.md).
 
-See [docs/reference/coding-standards.md](docs/reference/coding-standards.md) for detailed guidelines.
+**Quick reference**:
+- **Python**: JSON/YAML parsing, validation logic, state management, HTTP APIs, data transformation
+- **Bash**: File operations, tool orchestration, text processing, deployment workflows
+
+See the full [Coding Standards](docs/reference/coding-standards.md) for:
+- Complete language decision matrix
+- Error handling patterns for both languages
+- Logging conventions
+- Testing requirements
+- Code examples and anti-patterns
+- Migration plan for mixed-responsibility scripts
 
 ## Testing Requirements
 
@@ -234,7 +237,7 @@ def test_validate_versions_env_missing_kubernetes_version():
     """Test validation fails when KUBERNETES_VERSION is missing."""
     validator = ConfigValidator(Path("config/schemas"))
     config = {"TERRAFORM_VERSION": "1.6.6"}
-    
+
     with pytest.raises(ValidationError, match="KUBERNETES_VERSION"):
         validator.validate_versions_env(config)
 ```
@@ -264,9 +267,31 @@ def test_state_manager_roundtrip(state_data):
 
 ### Test Coverage
 
-- Maintain minimum 80% code coverage
-- Check coverage: `pytest --cov=src --cov-report=html`
-- View report: `open htmlcov/index.html`
+**Coverage Requirements**:
+- Minimum 80% code coverage required for all PRs
+- Coverage is enforced in CI pipeline
+- New code must maintain or improve coverage
+
+**Check Coverage**:
+```bash
+# Run tests with coverage report
+pytest --cov=src --cov-report=term-missing --cov-report=html
+
+# View detailed HTML report
+open htmlcov/index.html
+```
+
+**Coverage Configuration**:
+- Configured in `pyproject.toml` under `[tool.coverage]`
+- Threshold: `fail_under = 80.0`
+- Branch coverage enabled
+- Excludes test files and generated code
+
+**Improving Coverage**:
+1. Identify uncovered lines: `pytest --cov=src --cov-report=term-missing`
+2. Add tests for uncovered code paths
+3. Focus on critical business logic first
+4. Use property-based tests for edge cases
 
 ### Testing Checklist
 
@@ -506,12 +531,33 @@ pytest --log-cli-level=DEBUG tests/unit/test_validation.py
 # Run specific hook
 pre-commit run black --all-files
 
+# Run all hooks manually
+pre-commit run --all-files
+
 # Skip hooks temporarily (emergency only)
 git commit --no-verify -m "Emergency fix"
 
 # Update hooks
 pre-commit autoupdate
 ```
+
+**Emergency Hook Bypass**:
+
+Use `--no-verify` only in genuine emergencies:
+- Critical production hotfix
+- Broken CI pipeline blocking urgent fix
+- Pre-commit infrastructure issue
+
+After bypassing hooks:
+1. Create follow-up issue to fix violations
+2. Run hooks manually: `pre-commit run --all-files`
+3. Commit fixes in separate PR
+
+**Never bypass hooks for**:
+- Convenience
+- Avoiding code cleanup
+- Skipping tests
+- Committing secrets
 
 ## Getting Help
 

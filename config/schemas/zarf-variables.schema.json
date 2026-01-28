@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opencenter.io/schemas/zarf-variables.schema.json",
+  "title": "Zarf Package Variables",
+  "description": "Variable overrides for Zarf package deployment",
+  "type": "object",
+  "properties": {
+    "install_path": {
+      "type": "string",
+      "pattern": "^/[a-zA-Z0-9/_-]+$",
+      "default": "/opt/opencenter",
+      "description": "Installation path on bastion host",
+      "examples": ["/opt/opencenter", "/var/lib/opencenter"]
+    },
+    "registry_host": {
+      "type": "string",
+      "default": "localhost",
+      "description": "Container registry hostname",
+      "examples": ["localhost", "bastion.local", "192.168.1.10"]
+    },
+    "registry_port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 5000,
+      "description": "Container registry port"
+    },
+    "http_server_port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 8080,
+      "description": "HTTP file server port (nginx)"
+    },
+    "cluster_name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+      "default": "opencenter-cluster",
+      "description": "Kubernetes cluster name"
+    },
+    "cluster_domain": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$",
+      "default": "cluster.local",
+      "description": "Kubernetes cluster domain"
+    },
+    "pod_network_cidr": {
+      "type": "string",
+      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+      "default": "10.244.0.0/16",
+      "description": "Pod network CIDR",
+      "examples": ["10.244.0.0/16", "192.168.0.0/16"]
+    },
+    "service_network_cidr": {
+      "type": "string",
+      "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$",
+      "default": "10.96.0.0/12",
+      "description": "Service network CIDR",
+      "examples": ["10.96.0.0/12", "172.16.0.0/16"]
+    },
+    "enable_metrics_server": {
+      "type": "boolean",
+      "default": true,
+      "description": "Deploy metrics-server"
+    },
+    "enable_ingress": {
+      "type": "boolean",
+      "default": true,
+      "description": "Deploy ingress-nginx"
+    },
+    "enable_cert_manager": {
+      "type": "boolean",
+      "default": true,
+      "description": "Deploy cert-manager"
+    },
+    "enable_monitoring": {
+      "type": "boolean",
+      "default": true,
+      "description": "Deploy Prometheus and Grafana"
+    },
+    "enable_gitops": {
+      "type": "boolean",
+      "default": true,
+      "description": "Deploy FluxCD and Gitea"
+    },
+    "ssh_user": {
+      "type": "string",
+      "default": "ubuntu",
+      "description": "SSH user for node access",
+      "examples": ["ubuntu", "centos", "admin"]
+    },
+    "ssh_key_path": {
+      "type": "string",
+      "pattern": "^(/[a-zA-Z0-9._-]+)+$",
+      "description": "Path to SSH private key",
+      "examples": ["/root/.ssh/id_rsa", "/home/user/.ssh/deploy_key"]
+    }
+  },
+  "additionalProperties": true
+}

@@ -7,28 +7,35 @@ the bastion host as the source for all container images, binaries, and packages.
 """
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import Dict, Any
+
+from opencenter_build.logging import setup_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 def generate_offline_yml(bastion_ip: str, registry_port: int = 35000, nginx_port: int = 80) -> str:
     """
     Generate offline.yml content with bastion IP substituted.
-    
+
     Args:
         bastion_ip: IP address of the bastion host
         registry_port: Port for the container registry (default: 35000)
         nginx_port: Port for the nginx file server (default: 80)
-    
+
     Returns:
         String content of the offline.yml file
     """
-    
+
     # Build the configuration URLs
     registry_host = f"{bastion_ip}:{registry_port}"
-    http_server = f"http://{bastion_ip}" if nginx_port == 80 else f"http://{bastion_ip}:{nginx_port}"
-    
+    http_server = (
+        f"http://{bastion_ip}" if nginx_port == 80 else f"http://{bastion_ip}:{nginx_port}"
+    )
+
     offline_yml = f"""---
 ## Global Offline settings
 ### Private Container Image Registry
@@ -130,55 +137,51 @@ gvisor_containerd_shim_runsc_download_url: "{{{{ files_repo }}}}/gvisor/containe
 download_run_once: true
 download_localhost: false
 """
-    
+
     return offline_yml
 
 
 def main():
     """Main entry point for the script."""
-    parser = argparse.ArgumentParser(
-        description="Generate Kubespray offline.yml configuration"
-    )
-    parser.add_argument(
-        "--bastion-ip",
-        required=True,
-        help="IP address of the bastion host"
-    )
+    parser = argparse.ArgumentParser(description="Generate Kubespray offline.yml configuration")
+    parser.add_argument("--bastion-ip", required=True, help="IP address of the bastion host")
     parser.add_argument(
         "--registry-port",
         type=int,
         default=35000,
-        help="Port for the container registry (default: 35000)"
+        help="Port for the container registry (default: 35000)",
     )
     parser.add_argument(
-        "--nginx-port",
-        type=int,
-        default=80,
-        help="Port for the nginx file server (default: 80)"
+        "--nginx-port", type=int, default=80, help="Port for the nginx file server (default: 80)"
     )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        help="Output file path (default: stdout)"
-    )
-    
+    parser.add_argument("--output", type=Path, help="Output file path (default: stdout)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+
     args = parser.parse_args()
-    
+
+    # Setup logging
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    setup_logging(level=log_level)
+
+    logger.info("Generating offline.yml configuration")
+    logger.debug(f"Bastion IP: {args.bastion_ip}")
+    logger.debug(f"Registry port: {args.registry_port}")
+    logger.debug(f"Nginx port: {args.nginx_port}")
+
     # Generate the offline.yml content
     offline_yml = generate_offline_yml(
-        bastion_ip=args.bastion_ip,
-        registry_port=args.registry_port,
-        nginx_port=args.nginx_port
+        bastion_ip=args.bastion_ip, registry_port=args.registry_port, nginx_port=args.nginx_port
     )
-    
+
     # Write to file or stdout
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(offline_yml)
-        print(f"Generated offline.yml at: {args.output}", file=sys.stderr)
+        logger.info(f"Generated offline.yml at: {args.output}")
     else:
         print(offline_yml)
-    
+
+    logger.info("offline.yml generation complete")
     return 0
 
 
