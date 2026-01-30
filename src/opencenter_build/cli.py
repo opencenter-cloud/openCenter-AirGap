@@ -700,10 +700,35 @@ def build(
                 )
             )
 
+            # Display output locations
+            console.print()
+            console.print("[bold cyan]Build Artifacts:[/bold cyan]")
+
+            # Show manifest location
+            manifest_path = Path("dist/artifact-manifest.json")
+            if manifest_path.exists():
+                console.print(f"  [green]✓[/green] Manifest: {manifest_path}")
+
+            # Show zarf.yaml location
+            zarf_path = Path("zarf.yaml")
+            if zarf_path.exists():
+                console.print(f"  [green]✓[/green] Zarf config: {zarf_path}")
+
+            # Show package location (if created)
             if result.package_path:
-                console.print(f"[green]✓[/green] Package: {result.package_path}")
-            if result.manifest_path:
-                console.print(f"[green]✓[/green] Manifest: {result.manifest_path}")
+                package_path = Path(result.package_path)
+                if package_path.exists():
+                    console.print(f"  [green]✓[/green] Package: {result.package_path}")
+                else:
+                    console.print(
+                        f"  [yellow]⚠[/yellow] Package: {result.package_path} (not created - requires Zarf CLI)"
+                    )
+
+            # Show state file
+            state_path = Path(state_file)
+            if state_path.exists():
+                console.print(f"  [cyan]ℹ[/cyan] State: {state_path}")
+
         else:
             console.print(
                 Panel.fit(
