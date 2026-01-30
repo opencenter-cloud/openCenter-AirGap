@@ -1,473 +1,590 @@
-# Documentation Taxonomy (Diátaxis Framework)
+# Documentation Taxonomy
 
-## Framework Overview
+doc_type: reference
 
-Documentation organized by user need across two axes:
-- **Practical/Theoretical**: Doing vs Understanding
-- **Study/Work**: Learning vs Applying
+**Purpose**: Organize openCenter AirGap documentation using the Diátaxis framework.
 
-```
-                    PRACTICAL
-                        │
-         TUTORIALS      │      HOW-TO GUIDES
-    (learning-oriented) │  (problem-oriented)
-                        │
-STUDY ──────────────────┼────────────────── WORK
-                        │
-      EXPLANATION       │      REFERENCE
-  (understanding-       │   (information-
-      oriented)         │      oriented)
-                        │
-                   THEORETICAL
-```
+**Audience**: Documentation maintainers and contributors.
 
-## 1. TUTORIALS (Learning-Oriented)
+---
 
-**Purpose**: Take a newcomer from zero to working deployment through guided learning.
+## Diátaxis Framework
 
-**Characteristics**:
-- Step-by-step, no assumptions
-- Reproducible outcomes
-- Minimal explanation (defer to Explanation)
-- Safe to experiment
+Documentation is organized into four distinct types:
 
-### Current Mapping
-- **NEW**: `tutorials/01-first-deployment.md`
-  - Build first package in Zone A
-  - Deploy to single-node cluster
-  - Verify core services
-  - ~30 minutes, bare-metal only
+| Type | Goal | Scope | Voice | When to Use |
+|------|------|-------|-------|-------------|
+| **Tutorials** | Build confidence by doing | Single walkthrough with clear end result | Encouraging, patient | Learning the system |
+| **How-to Guides** | Get a job done | Focused steps, minimal background | Direct, practical | Solving specific problems |
+| **Reference** | Provide exact facts | Complete, structured information | Neutral, precise | Looking up details |
+| **Explanation** | Build mental models | Concepts, trade-offs, rationale | Thoughtful, grounded | Understanding why |
 
-- **NEW**: `tutorials/02-openstack-deployment.md`
-  - Terraform provisioning
-  - Multi-node HA cluster
-  - GitOps workflow
-  - ~60 minutes
+---
 
-### To Create
-```markdown
-# Tutorial: Your First Air-Gap Deployment
+## Current Documentation Structure
 
-## What You'll Build
-Single-node Kubernetes cluster with core services in 30 minutes.
+### Tutorials (Learning-Oriented)
 
-## Prerequisites
-- Ubuntu 24.04 build host (8GB RAM, 100GB disk)
-- Ubuntu 24.04 target node (8GB RAM, 100GB disk)
-- SSH access between hosts
+**Location**: `docs/tutorials/`
 
-## Steps
-1. Clone repository
-2. Configure versions
-3. Collect assets (15 min)
-4. Build package (5 min)
-5. Transfer to bastion
-6. Deploy cluster (10 min)
-7. Verify services
+| Document | Status | Action |
+|----------|--------|--------|
+| `01-first-deployment.md` | Keep | First-time user walkthrough |
 
-## What You Learned
-- Three-zone architecture
-- Zarf packaging workflow
-- Bastion role
-- Cluster validation
-```
+**Needed**:
+- Tutorial: Build your first air-gap package
+- Tutorial: Deploy to bare-metal cluster
+- Tutorial: Add custom components
 
-## 2. HOW-TO GUIDES (Problem-Oriented)
+---
 
-**Purpose**: Solve specific real-world problems. Assumes working knowledge.
+### How-to Guides (Task-Oriented)
 
-**Characteristics**:
-- Goal-oriented recipes
-- Assumes prerequisites met
-- Multiple paths acceptable
-- Production-focused
+**Location**: `docs/how-to/`
 
-### Current Mapping
+#### Build Tasks
+| Document | Status | Action |
+|----------|--------|--------|
+| `build/` (directory) | Review | Consolidate into task-specific guides |
 
-#### Build Phase
-- `docs/build-runbook.md` → `how-to/build-air-gap-package.md`
-- **NEW**: `how-to/update-component-versions.md`
-- **NEW**: `how-to/add-custom-images.md`
-- **NEW**: `how-to/mirror-terraform-providers.md`
+**Needed**:
+- How to initialize a new project
+- How to add components to manifest
+- How to scan repositories for images
+- How to generate Zarf manifest
+- How to build an air-gap package
+- How to resume a failed build
 
-#### Deploy Phase
-- `docs/deployment-runbook-baremetal.md` → `how-to/deploy-baremetal-cluster.md`
-- `docs/deployment-runbook-openstack.md` → `how-to/deploy-openstack-cluster.md`
-- `docs/bastion-setup-guide.md` → `how-to/configure-bastion-services.md`
-- **NEW**: `how-to/deploy-multi-cluster.md`
-- **NEW**: `how-to/deploy-behind-proxy.md`
+#### Deploy Tasks
+| Document | Status | Action |
+|----------|--------|--------|
+| `deploy/` (directory) | Review | Consolidate into task-specific guides |
 
-#### Verify Phase
-- `docs/cluster-health-verification-guide.md` → `how-to/verify-cluster-health.md`
-- `docs/package-integrity-guide.md` → `how-to/verify-package-integrity.md`
+**Needed**:
+- How to verify package integrity
+- How to deploy to bastion host
+- How to configure bastion services
+- How to verify deployment
 
-#### Operate Phase
-- `docs/troubleshooting-guide.md` → `how-to/troubleshoot-deployment.md`
-- `docs/cleanup-guide.md` → `how-to/cleanup-cluster.md`
-- **NEW**: `how-to/upgrade-kubernetes-version.md`
-- **NEW**: `how-to/rotate-certificates.md`
-- **NEW**: `how-to/backup-restore-cluster.md`
+#### Extend Tasks
+| Document | Status | Action |
+|----------|--------|--------|
+| `extend/` (directory) | Review | Consolidate into task-specific guides |
+| `component-manifest.md` | Keep | How to work with component manifests |
 
-#### Extend Phase
-- `docs/extension-guide.md` → `how-to/add-custom-services.md`
-- `docs/zarf-package-creation-guide.md` → `how-to/create-zarf-components.md`
-- **NEW**: `how-to/integrate-external-registry.md`
-- **NEW**: `how-to/customize-kubespray-config.md`
+**Needed**:
+- How to add custom images
+- How to add custom Helm charts
+- How to add custom tools
+- How to add custom repositories
 
-### Structure Template
-```markdown
-# How To: [Achieve Specific Goal]
+#### Operate Tasks
+| Document | Status | Action |
+|----------|--------|--------|
+| `operate/` (directory) | Review | Consolidate into task-specific guides |
 
-## Problem
-[What user wants to accomplish]
+**Needed**:
+- How to monitor build progress
+- How to clean build artifacts
+- How to troubleshoot build failures
+- How to update component versions
 
-## Prerequisites
-- [Checklist]
+#### Verify Tasks
+| Document | Status | Action |
+|----------|--------|--------|
+| `verify/` (directory) | Review | Consolidate into task-specific guides |
+| `verify-package.md` | Keep | How to verify package integrity |
 
-## Solution
-### Option 1: [Approach Name]
-[Steps]
+#### Migration Tasks
+| Document | Status | Action |
+|----------|--------|--------|
+| `migrate-from-bash.md` | Keep | How to migrate from bash scripts |
 
-### Option 2: [Alternative Approach]
-[Steps]
+---
 
-## Verification
-[How to confirm success]
+### Reference (Information-Oriented)
 
-## Troubleshooting
-[Common issues specific to this task]
+**Location**: `docs/reference/`
 
-## See Also
-- [Related how-tos]
-- [Reference docs]
-```
+#### CLI Reference
+| Document | Status | Action |
+|----------|--------|--------|
+| `cli/` (directory) | Review | Consolidate into single CLI reference |
+| `cli-commands.md` | **Delete** | Superseded by consolidated design doc |
 
-## 3. REFERENCE (Information-Oriented)
-
-**Purpose**: Provide accurate, complete technical specifications for lookup.
-
-**Characteristics**:
-- Comprehensive, authoritative
-- Structured for scanning
-- Minimal narrative
-- Version-specific
-
-### Current Mapping
+**Needed**:
+- CLI command reference (all 13 commands)
+- CLI options and flags
+- CLI environment variables
+- CLI exit codes
 
 #### Configuration Reference
-- `docs/zarf-variables-reference.md` → `reference/zarf-variables.md`
-- `docs/offline-repo-configuration.md` → `reference/offline-repositories.md`
-- `config/versions.env` → `reference/component-versions.md`
-- **NEW**: `reference/kubespray-variables.md`
-- **NEW**: `reference/terraform-variables.md`
-- **NEW**: `reference/ansible-inventory.md`
+| Document | Status | Action |
+|----------|--------|--------|
+| `configuration/` (directory) | Review | Consolidate into configuration reference |
+| `component-manifest-schema.md` | Keep | JSON schema for component manifest |
+| `version-management.md` | Keep | Version pinning reference |
 
-#### API/CLI Reference
-- **NEW**: `reference/zarf-commands.md`
-- **NEW**: `reference/deployment-scripts.md`
-- **NEW**: `reference/environment-variables.md`
+**Needed**:
+- Configuration file reference (versions.env)
+- Component manifest schema
+- Zarf manifest schema
+- Artifact manifest schema
 
 #### Architecture Reference
-- **NEW**: `reference/network-ports.md`
-- **NEW**: `reference/disk-requirements.md`
-- **NEW**: `reference/service-endpoints.md`
+| Document | Status | Action |
+|----------|--------|--------|
+| `architecture/` (directory) | Review | Move to explanation/ |
+
+#### Build System Reference
+| Document | Status | Action |
+|----------|--------|--------|
+| `build-steps.md` | Keep | Build pipeline step reference |
+| `build-determinism-summary.md` | **Delete** | Outdated, not implemented |
+| `state-management-integration.md` | Keep | State file format reference |
+
+#### Security Reference
+| Document | Status | Action |
+|----------|--------|--------|
+| `secrets-management.md` | Keep | Secrets handling reference |
+| `security-scanning.md` | Keep | Security scanning integration |
+| `firewall-whitelist.md` | Keep | Network requirements |
+| `firewall-whitelist-summary.md` | **Delete** | Duplicate of firewall-whitelist.md |
+
+#### Operations Reference
+| Document | Status | Action |
+|----------|--------|--------|
+| `logging.md` | Keep | Logging format and levels |
+| `metrics-integration.md` | Keep | Metrics and observability |
+| `troubleshooting.md` | Keep | Error messages and solutions |
+| `recovery-procedures.md` | Keep | Disaster recovery procedures |
+| `rollback.md` | Keep | Rollback procedures |
+
+#### Component Reference
+| Document | Status | Action |
+|----------|--------|--------|
+| `image-lists.md` | Keep | Container image inventory |
+| `component-independence.md` | Keep | Component dependency matrix |
+| `component-independence-summary.md` | **Delete** | Duplicate of component-independence.md |
 
 #### Compatibility Reference
-- **NEW**: `reference/version-compatibility-matrix.md`
-- **NEW**: `reference/supported-platforms.md`
-- **NEW**: `reference/tested-configurations.md`
+| Document | Status | Action |
+|----------|--------|--------|
+| `compatibility/` (directory) | Review | Consolidate into compatibility matrix |
 
-### Structure Template
-```markdown
-# Reference: [Component/API Name]
+#### Code Quality Reference
+| Document | Status | Action |
+|----------|--------|--------|
+| `coding-standards.md` | Keep | Python coding standards |
+| `code-review-findings.md` | **Delete** | Historical, not reference material |
+| `binary-packaging.md` | Keep | PyInstaller packaging reference |
 
-## Overview
-[One paragraph: what this is]
+#### Task Summaries (Historical)
+| Document | Status | Action |
+|----------|--------|--------|
+| `task-2.1-completion-summary.md` | **Delete** | Historical, not reference material |
 
-## [Section 1]
-### Parameter Name
-- **Type**: string
-- **Required**: yes
-- **Default**: `value`
-- **Description**: [What it does]
-- **Example**: `VARIABLE=value`
+---
 
-[Repeat for all parameters]
+### Explanation (Understanding-Oriented)
 
-## Examples
-[Minimal, complete examples]
+**Location**: `docs/explanation/`
 
-## Version History
-- v1.2.0: Added `new_param`
-- v1.1.0: Deprecated `old_param`
-```
+#### Architecture Explanations
+| Document | Status | Action |
+|----------|--------|--------|
+| `architecture/` (directory) | Keep | System architecture explanations |
+| `manifest-taxonomy.md` | Keep | Manifest types and relationships |
 
-## 4. EXPLANATION (Understanding-Oriented)
-
-**Purpose**: Illuminate concepts, design decisions, and context.
-
-**Characteristics**:
-- Conceptual, not procedural
-- Explains "why" not "how"
-- Connects ideas
-- Opinionated where appropriate
-
-### Current Mapping
-
-#### Architecture
-- `docs/design-document.md` → `explanation/architecture-overview.md`
-- `docs/build-flow-diagram.md` → `explanation/build-process.md`
-- **NEW**: `explanation/three-zone-model.md`
-- **NEW**: `explanation/air-gap-constraints.md`
-- **NEW**: `explanation/bastion-architecture.md`
+**Needed**:
+- Why three-zone architecture
+- Why Zarf for packaging
+- Why Python over bash
+- Why checkpoint/resume design
 
 #### Design Decisions
-- **NEW**: `explanation/why-kubespray.md`
-- **NEW**: `explanation/why-zarf.md`
-- **NEW**: `explanation/offline-first-design.md`
-- **NEW**: `explanation/security-model.md`
+| Document | Status | Action |
+|----------|--------|--------|
+| `design-decisions/` (directory) | Keep | Design rationale documents |
 
-#### Technical Deep-Dives
-- `docs/kubespray-idempotency.md` → `explanation/kubespray-idempotency.md`
-- `docs/kubespray-offline-idempotency.md` → `explanation/offline-mode-idempotency.md`
-- `docs/terraform-idempotency.md` → `explanation/terraform-idempotency.md`
-- `docs/fluxcd-idempotency.md` → `explanation/fluxcd-idempotency.md`
-- **NEW**: `explanation/package-integrity-model.md`
-- **NEW**: `explanation/gitops-in-airgap.md`
+**Needed**:
+- Design: Component manifest vs Zarf manifest
+- Design: State management approach
+- Design: Concurrent scanning strategy
+- Design: Artifact manifest format
 
-#### Requirements Context
-- `docs/product-requirements.md` → `explanation/requirements-rationale.md`
-- **NEW**: `explanation/compliance-considerations.md`
-- **NEW**: `explanation/edge-deployment-patterns.md`
+#### Requirements
+| Document | Status | Action |
+|----------|--------|--------|
+| `requirements/` (directory) | Keep | Requirements and constraints |
 
-### Structure Template
+**Needed**:
+- Requirements: Air-gap constraints
+- Requirements: Security requirements
+- Requirements: Performance requirements
+- Requirements: Compatibility requirements
+
+#### Technical Explanations
+| Document | Status | Action |
+|----------|--------|--------|
+| `technical/` (directory) | Keep | Technical deep-dives |
+
+**Needed**:
+- Technical: How Zarf bundling works
+- Technical: How checkpoint/resume works
+- Technical: How concurrent scanning works
+- Technical: How artifact verification works
+
+---
+
+### Design Documents (Special Category)
+
+**Location**: `docs/design/`
+
+| Document | Status | Action |
+|----------|--------|--------|
+| `python-improvements/consolidated-python-improvements.md` | Keep | Master design document |
+
+**Note**: Design documents are a mix of explanation and reference. They document the "why" and "how" of major features before implementation.
+
+---
+
+## Root-Level Documents
+
+| Document | Status | Action |
+|----------|--------|--------|
+| `README.md` | Keep | Documentation index and navigation |
+| `taxonomy.md` | Keep | This document |
+| `architecture-review.md` | **Delete** | Historical, superseded by design docs |
+
+---
+
+## Consolidation Plan
+
+### Phase 1: Delete Obsolete Documents
+
+**Immediate Deletions** (Historical or Duplicate):
+```bash
+rm docs/architecture-review.md
+rm docs/reference/cli-commands.md
+rm docs/reference/build-determinism-summary.md
+rm docs/reference/firewall-whitelist-summary.md
+rm docs/reference/component-independence-summary.md
+rm docs/reference/code-review-findings.md
+rm docs/reference/task-2.1-completion-summary.md
+```
+
+**Rationale**:
+- `architecture-review.md` - Historical document, superseded by design docs
+- `cli-commands.md` - Superseded by consolidated design doc CLI reference
+- `*-summary.md` files - Duplicates of full documents
+- `code-review-findings.md` - Historical, not reference material
+- `task-2.1-completion-summary.md` - Historical milestone, not documentation
+
+### Phase 2: Consolidate Directories
+
+**Build How-to Guides** (`docs/how-to/build/` → individual files):
+- Extract task-specific guides from directory
+- Create focused how-to documents
+- Delete directory after extraction
+
+**Deploy How-to Guides** (`docs/how-to/deploy/` → individual files):
+- Extract task-specific guides from directory
+- Create focused how-to documents
+- Delete directory after extraction
+
+**CLI Reference** (`docs/reference/cli/` → single file):
+- Consolidate into `docs/reference/cli-reference.md`
+- Include all 13 commands with examples
+- Delete directory after consolidation
+
+**Configuration Reference** (`docs/reference/configuration/` → single file):
+- Consolidate into `docs/reference/configuration-reference.md`
+- Include all config file formats
+- Delete directory after consolidation
+
+### Phase 3: Create Missing Documents
+
+**Tutorials** (Priority: High):
+1. `docs/tutorials/02-build-first-package.md` - Build your first air-gap package
+2. `docs/tutorials/03-deploy-to-baremetal.md` - Deploy to bare-metal cluster
+3. `docs/tutorials/04-add-custom-components.md` - Add custom components
+
+**How-to Guides** (Priority: High):
+1. `docs/how-to/initialize-project.md` - Initialize new project
+2. `docs/how-to/add-components.md` - Add components to manifest
+3. `docs/how-to/build-package.md` - Build air-gap package
+4. `docs/how-to/verify-package.md` - Verify package integrity (already exists)
+5. `docs/how-to/deploy-package.md` - Deploy to bastion host
+6. `docs/how-to/troubleshoot-build.md` - Troubleshoot build failures
+
+**Reference** (Priority: Medium):
+1. `docs/reference/cli-reference.md` - Complete CLI reference
+2. `docs/reference/configuration-reference.md` - Configuration file reference
+3. `docs/reference/manifest-schemas.md` - All manifest schemas
+
+**Explanation** (Priority: Low):
+1. `docs/explanation/why-three-zones.md` - Three-zone architecture rationale
+2. `docs/explanation/why-zarf.md` - Zarf selection rationale
+3. `docs/explanation/why-python.md` - Python over bash rationale
+4. `docs/explanation/checkpoint-resume-design.md` - Checkpoint/resume design
+
+### Phase 4: Update Navigation
+
+**Update `docs/README.md`**:
+- Organize by Diátaxis type
+- Link to all documents
+- Provide clear navigation
+- Include quick-start guide
+
+---
+
+## Document Templates
+
+### Tutorial Template
+
 ```markdown
-# Explanation: [Concept/Decision]
+# Tutorial: [Task Name]
 
-## Context
-[What problem space this addresses]
+doc_type: tutorial
 
-## The Challenge
-[What makes this difficult/interesting]
+**Goal**: [What you'll build/achieve]
 
-## Our Approach
-[How we solve it, design decisions]
+**Time**: [Estimated duration]
+
+**Prerequisites**:
+- [Prerequisite 1]
+- [Prerequisite 2]
+
+---
+
+## What You'll Learn
+
+- [Learning objective 1]
+- [Learning objective 2]
+
+## Step 1: [First Step]
+
+[Encouraging instructions with commands]
+
+## Step 2: [Second Step]
+
+[Continue with clear steps]
+
+## Check Your Work
+
+[How to verify success]
+
+## Next Steps
+
+- [Related tutorial]
+- [Related how-to guide]
+```
+
+### How-to Guide Template
+
+```markdown
+# How to [Task]
+
+doc_type: how-to
+
+**Task**: [Brief task description]
+
+**Prerequisites**:
+- [Prerequisite 1]
+- [Prerequisite 2]
+
+---
+
+## Steps
+
+1. [Step 1 with command]
+   ```bash
+   command-here
+   ```
+
+2. [Step 2 with command]
+   ```bash
+   command-here
+   ```
+
+## Troubleshooting
+
+**Issue**: [Common problem]
+**Solution**: [How to fix]
+
+## Related
+
+- [Related how-to]
+- [Related reference]
+```
+
+### Reference Template
+
+```markdown
+# [Topic] Reference
+
+doc_type: reference
+
+**Purpose**: [What this reference covers]
+
+---
+
+## [Section 1]
+
+| Item | Description | Example |
+|------|-------------|---------|
+| [Item 1] | [Description] | [Example] |
+
+## [Section 2]
+
+[Structured information]
+
+## See Also
+
+- [Related reference]
+```
+
+### Explanation Template
+
+```markdown
+# [Concept] Explained
+
+doc_type: explanation
+
+**Purpose**: [What this explains]
+
+---
+
+## Overview
+
+[Brief concept summary]
+
+## Why This Approach
+
+[Rationale and trade-offs]
+
+## How It Works
+
+[Technical explanation]
 
 ## Alternatives Considered
-[What we didn't choose and why]
 
-## Tradeoffs
-[What we gain/lose with this approach]
+[Other approaches and why not chosen]
 
-## Implications
-[How this affects users/operations]
+## Common Misconceptions
 
-## Related Concepts
-[Links to other explanations]
+[Clarify misunderstandings]
+
+## Related
+
+- [Related explanation]
+- [Related reference]
 ```
 
-## 5. Proposed Directory Structure
-
-```
-docs/
-├── README.md                          # Navigation hub
-│
-├── tutorials/                         # LEARNING
-│   ├── 01-first-deployment.md
-│   ├── 02-openstack-deployment.md
-│   └── 03-custom-services.md
-│
-├── how-to/                            # PROBLEM-SOLVING
-│   ├── build/
-│   │   ├── build-air-gap-package.md
-│   │   ├── update-component-versions.md
-│   │   ├── add-custom-images.md
-│   │   └── mirror-terraform-providers.md
-│   ├── deploy/
-│   │   ├── deploy-baremetal-cluster.md
-│   │   ├── deploy-openstack-cluster.md
-│   │   ├── configure-bastion-services.md
-│   │   └── deploy-multi-cluster.md
-│   ├── verify/
-│   │   ├── verify-cluster-health.md
-│   │   └── verify-package-integrity.md
-│   ├── operate/
-│   │   ├── troubleshoot-deployment.md
-│   │   ├── cleanup-cluster.md
-│   │   ├── upgrade-kubernetes-version.md
-│   │   └── backup-restore-cluster.md
-│   └── extend/
-│       ├── add-custom-services.md
-│       ├── create-zarf-components.md
-│       └── customize-kubespray-config.md
-│
-├── reference/                         # INFORMATION
-│   ├── configuration/
-│   │   ├── zarf-variables.md
-│   │   ├── kubespray-variables.md
-│   │   ├── terraform-variables.md
-│   │   └── environment-variables.md
-│   ├── architecture/
-│   │   ├── network-ports.md
-│   │   ├── disk-requirements.md
-│   │   └── service-endpoints.md
-│   ├── compatibility/
-│   │   ├── component-versions.md
-│   │   ├── version-compatibility-matrix.md
-│   │   └── supported-platforms.md
-│   └── cli/
-│       ├── zarf-commands.md
-│       └── deployment-scripts.md
-│
-└── explanation/                       # UNDERSTANDING
-    ├── architecture/
-    │   ├── architecture-overview.md
-    │   ├── three-zone-model.md
-    │   ├── air-gap-constraints.md
-    │   ├── bastion-architecture.md
-    │   └── build-process.md
-    ├── design-decisions/
-    │   ├── why-kubespray.md
-    │   ├── why-zarf.md
-    │   ├── offline-first-design.md
-    │   └── security-model.md
-    ├── technical/
-    │   ├── kubespray-idempotency.md
-    │   ├── offline-mode-idempotency.md
-    │   ├── terraform-idempotency.md
-    │   ├── fluxcd-idempotency.md
-    │   ├── package-integrity-model.md
-    │   └── gitops-in-airgap.md
-    └── requirements/
-        ├── requirements-rationale.md
-        ├── compliance-considerations.md
-        └── edge-deployment-patterns.md
-```
-
-## 6. Migration Strategy
-
-### Phase 1: Establish Structure
-1. Create directory structure
-2. Write `docs/README.md` navigation hub
-3. Create templates for each quadrant
-
-### Phase 2: Migrate Existing Docs
-1. **Tutorials**: Create new (none exist)
-2. **How-To**: Refactor runbooks/guides
-3. **Reference**: Extract from guides, add missing
-4. **Explanation**: Reorganize design docs, add context
-
-### Phase 3: Fill Gaps
-Priority order:
-1. Tutorial: First deployment (critical for onboarding)
-2. Reference: Version compatibility matrix
-3. How-To: Upgrade procedures
-4. Explanation: Why Kubespray/Zarf
-
-### Phase 4: Deprecate Old Structure
-1. Add redirects in old docs
-2. Update all internal links
-3. Archive old structure after 1 release cycle
-
-## 7. Documentation Standards
-
-### Diátaxis-Specific Rules
-
-#### Tutorials
-- **Must** be reproducible start-to-finish
-- **Must** state learning objectives upfront
-- **Must not** explain concepts (link to Explanation)
-- **Must** provide exact commands/values
-
-#### How-To Guides
-- **Must** state the problem/goal first
-- **Must** list prerequisites
-- **Must not** teach concepts (link to Explanation)
-- **May** offer multiple approaches
-
-#### Reference
-- **Must** be comprehensive for the scope
-- **Must** use consistent structure
-- **Must not** include procedures (link to How-To)
-- **Must** specify version applicability
-
-#### Explanation
-- **Must** explain "why" not "how"
-- **Must** provide context and background
-- **Must not** include step-by-step procedures
-- **May** be opinionated
-
-### Cross-Linking Rules
-- Tutorials → Explanation (for concepts)
-- How-To → Reference (for parameters)
-- How-To → Explanation (for context)
-- Reference → How-To (for usage examples)
-- Explanation → Reference (for specifications)
-
-### Metadata Template
-```markdown
 ---
-type: [tutorial|how-to|reference|explanation]
-audience: [build-engineer|field-operator|security-auditor|platform-architect]
-difficulty: [beginner|intermediate|advanced]
-time: [estimated minutes]
-version: [applicable version range]
-last_updated: YYYY-MM-DD
+
+## Maintenance Guidelines
+
+### Adding New Documentation
+
+1. **Identify document type** using Diátaxis framework
+2. **Check for existing documents** on the same topic
+3. **Use appropriate template** for document type
+4. **Add to navigation** in `docs/README.md`
+5. **Link related documents** bidirectionally
+
+### Updating Existing Documentation
+
+1. **Verify document type** is correct
+2. **Check for scope creep** (mixing types)
+3. **Update related documents** if needed
+4. **Update navigation** if title/location changes
+
+### Deprecating Documentation
+
+1. **Mark as deprecated** in document header
+2. **Link to replacement** document
+3. **Update navigation** to point to replacement
+4. **Delete after 1 release cycle** (3 months)
+
 ---
-```
 
-## 8. Quality Checklist
+## Quality Checklist
 
-### For Each Document
-- [ ] Correct quadrant (Tutorial/How-To/Reference/Explanation)
-- [ ] Metadata complete
-- [ ] Links to related docs in other quadrants
-- [ ] Code blocks have language specified
-- [ ] Commands show expected output
-- [ ] Prerequisites clearly stated
-- [ ] Version-specific information marked
+### All Documents
 
-### For Tutorials
-- [ ] Tested end-to-end on clean system
-- [ ] Takes stated time ±20%
-- [ ] Learning objectives achieved
-- [ ] No unexplained concepts
+- [ ] `doc_type` specified in first 60 lines
+- [ ] Purpose/goal stated clearly
+- [ ] Audience identified
+- [ ] Related documents linked
+- [ ] Examples use real paths/commands
+- [ ] No AI markers (see steering/docs.md)
 
-### For How-To Guides
-- [ ] Problem clearly stated
-- [ ] Solution works in production
+### Tutorials
+
+- [ ] Clear end result stated
+- [ ] Prerequisites listed
+- [ ] Step-by-step walkthrough
 - [ ] Verification steps included
-- [ ] Troubleshooting section present
+- [ ] Next steps suggested
+- [ ] Encouraging tone
 
-### For Reference
-- [ ] All parameters documented
-- [ ] Examples are minimal and complete
-- [ ] Version history included
-- [ ] Alphabetically or logically ordered
+### How-to Guides
 
-### For Explanation
-- [ ] Explains "why" not "how"
-- [ ] Design decisions justified
-- [ ] Tradeoffs acknowledged
-- [ ] Related concepts linked
+- [ ] Task clearly stated
+- [ ] Prerequisites listed
+- [ ] Minimal background
+- [ ] Ordered steps
+- [ ] Troubleshooting section
+- [ ] Direct, practical tone
 
-## 9. Maintenance
+### Reference
 
-### Update Triggers
-- **Code change** → Update How-To + Reference
-- **Architecture change** → Update Explanation + Reference
-- **New feature** → Add Tutorial + How-To + Reference + Explanation
-- **Version bump** → Update Reference + How-To
-- **Bug fix** → Update How-To (troubleshooting)
+- [ ] Complete information
+- [ ] Structured format (tables, lists)
+- [ ] No narrative
+- [ ] Neutral, precise tone
+- [ ] Examples for clarity
 
-### Review Cadence
-- **Tutorials**: Test quarterly
-- **How-To**: Review on each release
-- **Reference**: Update with code changes
-- **Explanation**: Review annually or on major changes
+### Explanation
 
-### Ownership
-- Build Engineer: Build how-tos, build reference
-- Field Operator: Deploy how-tos, troubleshooting
-- Platform Architect: Explanation docs, architecture reference
-- All: Tutorials (collaborative)
+- [ ] Concept summary
+- [ ] Why/rationale explained
+- [ ] Trade-offs discussed
+- [ ] Alternatives mentioned
+- [ ] Misconceptions addressed
+- [ ] Thoughtful, grounded tone
+
+---
+
+## Migration Status
+
+**Last Updated**: 2026-01-30
+
+### Completed
+
+- ✓ Taxonomy created
+- ✓ Consolidation plan defined
+- ✓ Templates created
+
+### In Progress
+
+- ⚠ Phase 1: Delete obsolete documents
+- ⚠ Phase 2: Consolidate directories
+- ⚠ Phase 3: Create missing documents
+- ⚠ Phase 4: Update navigation
+
+### Not Started
+
+- ⚠ Quality audit of existing documents
+- ⚠ Bidirectional linking
+- ⚠ Search/index generation
+
+---
+
+## References
+
+- [Diátaxis Framework](https://diataxis.fr/)
+- [Documentation System](https://documentation.divio.com/)
+- [Write the Docs](https://www.writethedocs.org/)
