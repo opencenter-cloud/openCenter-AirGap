@@ -1044,6 +1044,45 @@ def status(
             console.print(f"[yellow]⟳ Build in progress ({running} running)[/yellow]")
         elif completed == total:
             console.print(f"[green]✓ Build completed successfully[/green]")
+
+            # Show build artifacts if build is complete
+            console.print()
+            console.print("[bold cyan]Build Artifacts:[/bold cyan]")
+
+            # Check for manifest
+            manifest_path = Path("dist/artifact-manifest.json")
+            if manifest_path.exists():
+                console.print(f"  [green]✓[/green] Manifest: {manifest_path}")
+                # Read manifest to show artifact count
+                try:
+                    import json
+
+                    manifest_data = json.loads(manifest_path.read_text())
+                    artifact_count = manifest_data.get("total_artifacts", 0)
+                    console.print(f"    [dim]└─ {artifact_count} artifacts[/dim]")
+                except Exception:
+                    pass
+
+            # Check for zarf.yaml
+            zarf_path = Path("zarf.yaml")
+            if zarf_path.exists():
+                console.print(f"  [green]✓[/green] Zarf config: {zarf_path}")
+
+            # Check for package
+            package_path = Path("dist/zarf-package-opencenter-airgap.tar.zst")
+            if package_path.exists():
+                size_mb = package_path.stat().st_size / (1024 * 1024)
+                console.print(f"  [green]✓[/green] Package: {package_path}")
+                console.print(f"    [dim]└─ {size_mb:.1f} MB[/dim]")
+            else:
+                console.print(
+                    f"  [yellow]⚠[/yellow] Package: {package_path} (not created - requires Zarf CLI)"
+                )
+
+            # Show state file
+            if state_file.exists():
+                console.print(f"  [cyan]ℹ[/cyan] State: {state_file}")
+
         else:
             console.print(f"[cyan]○ {pending} step(s) pending[/cyan]")
 
