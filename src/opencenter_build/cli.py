@@ -4,6 +4,7 @@ This module provides the main CLI entry point using Typer and Rich for
 a modern, user-friendly command-line experience.
 """
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -514,30 +515,147 @@ def build(
         # Create orchestrator
         orchestrator = BuildOrchestrator(config, state_mgr, clean=clean)
 
-        # Register step handlers (placeholder implementations)
+        # Register step handlers
+        from opencenter_build.scanner import RepositoryScanner
+        from opencenter_build.manifest import ManifestGenerator
+        from opencenter_build.zarf_generator import ZarfGenerator
+
         def scan_repositories() -> dict[str, str]:
+            """Scan repositories for container images."""
             console.print("  [cyan]Scanning repositories...[/cyan]")
-            return {"images": "config/all-images.txt"}
+
+            # Read git repositories list
+            git_repos_file = Path("config/git-repositories.txt")
+            if not git_repos_file.exists():
+                console.print(f"  [yellow]⚠[/yellow] No git-repositories.txt found, skipping scan")
+                return {"images": "config/all-images.txt", "count": "0"}
+
+            # Parse repository paths
+            repo_paths = []
+            for line in git_repos_file.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    # Extract repo name from URL or path
+                    repo_name = line.split("/")[-1].replace(".git", "")
+                    repo_path = Path("build") / repo_name
+                    if repo_path.exists():
+                        repo_paths.append(repo_path)
+
+            if not repo_paths:
+                console.print(
+                    f"  [yellow]⚠[/yellow] No repositories found in build/, skipping scan"
+                )
+                return {"images": "config/all-images.txt", "count": "0"}
+
+            # Scan repositories
+            scanner = RepositoryScanner(repos=repo_paths)
+            results = scanner.scan_all()
+
+            # Collect all unique images
+            all_images = set()
+            for images in results.values():
+                all_images.update(images)
+
+            # Write to output file
+            output_file = Path("config/all-images.txt")
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            output_file.write_text("\n".join(sorted(all_images)) + "\n")
+
+            console.print(f"  [green]✓[/green] Found {len(all_images)} images")
+            return {"images": str(output_file), "count": str(len(all_images))}
 
         def collect_kubespray_offline() -> dict[str, str]:
+            """Collect kubespray-offline assets."""
             console.print("  [cyan]Collecting kubespray-offline assets...[/cyan]")
-            return {"assets": "build/kubespray-offline/outputs"}
+
+            # Check if kubespray-offline exists
+            kubespray_dir = Path("build/kubespray-offline")
+            if not kubespray_dir.exists():
+                console.print(f"  [yellow]⚠[/yellow] kubespray-offline not found, skipping")
+                return {"assets": str(kubespray_dir / "outputs"), "status": "skipped"}
+
+            # In real implementation, would run download-all.sh
+            # For now, just verify directory structure
+            outputs_dir = kubespray_dir / "outputs"
+            if outputs_dir.exists():
+                console.print(f"  [green]✓[/green] Assets directory exists")
+                return {"assets": str(outputs_dir), "status": "verified"}
+            else:
+                console.print(f"  [yellow]⚠[/yellow] No outputs directory found")
+                return {"assets": str(outputs_dir), "status": "missing"}
 
         def mirror_terraform_providers() -> dict[str, str]:
+            """Mirror Terraform providers."""
             console.print("  [cyan]Mirroring Terraform providers...[/cyan]")
-            return {"providers": "assets/terraform-mirror"}
+
+            # Check if Terraform is needed
+            terraform_dir = Path("assets/terraform")
+            if not terraform_dir.exists():
+                console.print(f"  [yellow]⚠[/yellow] No Terraform modules found, skipping")
+                return {"providers": "assets/terraform-mirror", "status": "skipped"}
+
+            # In real implementation, would run terraform providers mirror
+            mirror_dir = Path("assets/terraform-mirror")
+            mirror_dir.mkdir(parents=True, exist_ok=True)
+
+            console.print(f"  [green]✓[/green] Provider mirror directory ready")
+            return {"providers": str(mirror_dir), "status": "ready"}
 
         def organize_assets() -> dict[str, str]:
+            """Organize assets for packaging."""
             console.print("  [cyan]Organizing assets...[/cyan]")
-            return {"assets": "assets/"}
+
+            assets_dir = Path("assets")
+            assets_dir.mkdir(parents=True, exist_ok=True)
+
+            # Count assets
+            asset_count = sum(1 for _ in assets_dir.rglob("*") if _.is_file())
+
+            console.print(f"  [green]✓[/green] Organized {asset_count} asset files")
+            return {"assets": str(assets_dir), "count": str(asset_count)}
 
         def create_zarf_package() -> dict[str, str]:
+            """Create Zarf package."""
             console.print("  [cyan]Creating Zarf package...[/cyan]")
-            return {"package": "dist/zarf-package-opencenter-airgap.tar.zst"}
+
+            # Generate zarf.yaml if needed
+            zarf_file = Path("zarf.yaml")
+            if not zarf_file.exists():
+                console.print("  [cyan]Generating zarf.yaml...[/cyan]")
+                generator = ZarfGenerator(config)
+                generator.generate(zarf_file)
+                console.print(f"  [green]✓[/green] Generated zarf.yaml")
+
+            # In real implementation, would run: zarf package create --confirm
+            dist_dir = Path("dist")
+            dist_dir.mkdir(parents=True, exist_ok=True)
+
+            package_path = dist_dir / "zarf-package-opencenter-airgap.tar.zst"
+            console.print(f"  [yellow]⚠[/yellow] Zarf package creation requires 'zarf' CLI")
+            console.print(f"  [cyan]Would create: {package_path}[/cyan]")
+
+            return {"package": str(package_path), "status": "simulated"}
 
         def generate_manifest() -> dict[str, str]:
+            """Generate artifact manifest."""
             console.print("  [cyan]Generating artifact manifest...[/cyan]")
-            return {"manifest": "dist/artifact-manifest.json"}
+
+            # Use project root as build directory
+            build_dir = Path(".")
+            generator = ManifestGenerator(build_dir)
+            manifest_obj = generator.generate()
+
+            dist_dir = Path("dist")
+            dist_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = dist_dir / "artifact-manifest.json"
+
+            # Write manifest to JSON file
+            manifest_path.write_text(json.dumps(manifest_obj.to_dict(), indent=2))
+
+            artifact_count = manifest_obj.total_artifacts
+            console.print(f"  [green]✓[/green] Generated manifest with {artifact_count} artifacts")
+
+            return {"manifest": str(manifest_path), "artifacts": str(artifact_count)}
 
         orchestrator.register_step_handler("scan_repositories", scan_repositories)
         orchestrator.register_step_handler("collect_kubespray_offline", collect_kubespray_offline)
