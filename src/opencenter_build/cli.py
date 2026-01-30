@@ -33,8 +33,8 @@ def init(
     create_manifest: bool = typer.Option(
         False, "--create-manifest", help="Create component manifest from template"
     ),
-    template: Optional[str] = typer.Option(
-        None, "--template", help="Template: baremetal, openstack (default: baremetal)"
+    template: str = typer.Option(
+        "baremetal", "--template", help="Template: baremetal, openstack"
     ),
     config_file: Path = typer.Option(
         Path("config/versions.env"), "--config", help="Configuration file path"
@@ -45,6 +45,11 @@ def init(
     Creates necessary directory structure and optionally generates a component
     manifest from a template. Validates existing configuration if present.
     """
+    from opencenter_build.component_manifest import (
+        create_default_manifest,
+        write_manifest,
+    )
+
     try:
         # Create directory structure
         directories = [
@@ -85,23 +90,11 @@ def init(
                     return
 
             # Create manifest from template
-            manifest = create_default_manifest()
+            manifest = create_default_manifest(template=template)
+            write_manifest(manifest, manifest_path)
 
-            # Customize based on template
-            template_name = template or "baremetal"
-            if template_name == "openstack":
-                # Add OpenStack-specific configuration
-                manifest.terraform_providers.append(
-                    {
-                        "name": "openstack",
-                        "version": "{{TERRAFORM_OPENSTACK_VERSION}}",
-                        "source": "terraform-provider-openstack/openstack",
-                    }
-                )
-
-            manifest.save(manifest_path)
             console.print(f"[green]✓[/green] Created component manifest: {manifest_path}")
-            console.print(f"  Template: {template_name}")
+            console.print(f"  Template: {template}")
 
         # Display success summary
         console.print()
@@ -147,6 +140,83 @@ def add(
     Examples:
         Add a tool:
             opencenter-airgap add tool helm --version 3.14.0 --url https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz --extract --binary linux-amd64/helm
+
+        Add a repository:
+            opencenter-airgap add repo kubespray --url https://github.com/kubernetes-sigs/kubespray.git --ref master
+
+        Add an image:
+            opencenter-airgap add image nginx:1.21
+
+        Add a chart:
+            opencenter-airgap add chart cert-manager --version v1.13.0 --repo https://charts.jetstack.io
+    """
+    from opencenter_build.component_manifest import (
+        ComponentManifest,
+        read_manifest,
+        write_manifest,
+    )
+
+    try:
+        # Load or create manifest
+        if manifest_path.exists():
+            manifest = read_manifest(manifest_path)
+            console.print(f"[cyan]Loaded manifest:[/cyan] {manifest_path}")
+        else:
+            manifest = ComponentManifest()
+            console.print(f"[cyan]Creating new manifest:[/cyan] {manifest_path}")
+
+        # Add component based on type
+        if component_type == "tool":
+            if not version or not url:
+                console.print("[red]Error:[/red] --version and --url required for tools")
+                raise typer.Exit(code=1)
+
+            manifest.add_tool(
+                name=name,
+                version=version,
+                url=url,
+                extract=extract,
+                binary=binary,
+            )
+            console.print(f"[green]✓[/green] Added tool: {name} v{version}")
+
+        elif component_type == "repo":
+            if not url or not ref:
+                console.print("[red]Error:[/red] --url and --ref required for repositories")
+                raise typer.Exit(code=1)
+
+            manifest.add_repository(name=name, url=url, ref=ref)
+            console.print(f"[green]✓[/green] Added repository: {name} ({ref})")
+
+        elif component_type == "image":
+            manifest.add_image(name)
+            console.print(f"[green]✓[/green] Added image: {name}")
+
+        elif component_type == "chart":
+            if not version or not repo:
+                console.print("[red]Error:[/red] --version and --repo required for charts")
+                raise typer.Exit(code=1)
+
+            manifest.add_chart(name=name, repo=repo, version=version)
+            console.print(f"[green]✓[/green] Added chart: {name} v{version}")
+
+        else:
+            console.print(
+                f"[red]Error:[/red] Unknown component type: {component_type}\n"
+                "Valid types: tool, repo, image, chart"
+            )
+            raise typer.Exit(code=1)
+
+        # Save manifest
+        write_manifest(manifest, manifest_path)
+        console.print(f"[green]✓[/green] Saved manifest: {manifest_path}")
+
+    except ConfigError as exc:
+        console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[bold red]Error:[/bold red] {exc}")
+        raise typer.Exit(code=1)
 
         Add a repository:
             opencenter-airgap add repo kubespray --url https://github.com/kubernetes-sigs/kubespray.git --ref master
