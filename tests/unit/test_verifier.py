@@ -92,7 +92,9 @@ class TestPackageVerifier:
         # Should try multiple verification strategies
         assert mock_run.call_count >= 1
 
-    def test_verify_signature_with_env_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_verify_signature_with_env_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test signature verification with public key from environment."""
         verifier = PackageVerifier()
         package = tmp_path / "test.tar.zst"
@@ -102,7 +104,9 @@ class TestPackageVerifier:
         sig_file.write_text("fake signature")
 
         # Set environment variable
-        monkeypatch.setenv("COSIGN_PUBLIC_KEY", "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----")
+        monkeypatch.setenv(
+            "COSIGN_PUBLIC_KEY", "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----"
+        )
 
         mock_result = Mock()
         mock_result.returncode = 0

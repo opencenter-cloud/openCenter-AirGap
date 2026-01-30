@@ -315,9 +315,9 @@ class PackageVerifier:
                         if "images" in manifest_data:
                             manifest_image_count = len(manifest_data["images"])
                             # Count images in zarf output (rough heuristic)
-                            package_image_count = package_info.count("registry.k8s.io") + package_info.count(
-                                "docker.io"
-                            )
+                            package_image_count = package_info.count(
+                                "registry.k8s.io"
+                            ) + package_info.count("docker.io")
 
                             if manifest_image_count > 0 and package_image_count == 0:
                                 errors.append(

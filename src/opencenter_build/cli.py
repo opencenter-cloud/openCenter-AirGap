@@ -33,9 +33,7 @@ def init(
     create_manifest: bool = typer.Option(
         False, "--create-manifest", help="Create component manifest from template"
     ),
-    template: str = typer.Option(
-        "baremetal", "--template", help="Template: baremetal, openstack"
-    ),
+    template: str = typer.Option("baremetal", "--template", help="Template: baremetal, openstack"),
     config_file: Path = typer.Option(
         Path("config/versions.env"), "--config", help="Configuration file path"
     ),
@@ -218,6 +216,7 @@ def add(
         console.print(f"[bold red]Error:[/bold red] {exc}")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def scan(
     repos: Optional[list[Path]] = typer.Option(
@@ -264,6 +263,7 @@ def scan(
                 raise typer.Exit(code=1)
 
             from opencenter_build.component_manifest import read_manifest
+
             manifest = read_manifest(manifest_path)
 
             # Check if repositories are cloned
@@ -390,6 +390,7 @@ def generate_manifest(
 
         console.print(f"[cyan]Loading component manifest...[/cyan]")
         from opencenter_build.component_manifest import read_manifest
+
         manifest = read_manifest(component_manifest)
         console.print(
             f"[green]✓[/green] Loaded {len(manifest.tools)} tools, {len(manifest.repositories)} repos"
@@ -556,8 +557,12 @@ def build(
             # Check if kubespray-offline exists
             kubespray_dir = Path("build/kubespray-offline")
             if not kubespray_dir.exists():
-                console.print(f"  [yellow]⚠[/yellow] kubespray-offline not found at {kubespray_dir}")
-                console.print(f"  [cyan]Clone: git clone https://github.com/kubespray-offline/kubespray-offline.git build/kubespray-offline[/cyan]")
+                console.print(
+                    f"  [yellow]⚠[/yellow] kubespray-offline not found at {kubespray_dir}"
+                )
+                console.print(
+                    f"  [cyan]Clone: git clone https://github.com/kubespray-offline/kubespray-offline.git build/kubespray-offline[/cyan]"
+                )
                 return {"assets": "", "status": "skipped", "reason": "kubespray_offline_not_found"}
 
             # Check if download-all.sh exists
@@ -572,12 +577,20 @@ def build(
                 # Count artifacts
                 file_count = sum(1 for _ in outputs_dir.rglob("*") if _.is_file())
                 if file_count > 0:
-                    console.print(f"  [green]✓[/green] Found {file_count} existing artifacts in {outputs_dir}")
-                    return {"assets": str(outputs_dir), "status": "verified", "count": str(file_count)}
+                    console.print(
+                        f"  [green]✓[/green] Found {file_count} existing artifacts in {outputs_dir}"
+                    )
+                    return {
+                        "assets": str(outputs_dir),
+                        "status": "verified",
+                        "count": str(file_count),
+                    }
 
             # Run download-all.sh if outputs don't exist
             console.print(f"  [cyan]Running kubespray-offline download-all.sh...[/cyan]")
-            console.print(f"  [yellow]⚠[/yellow] This may take 30-60 minutes depending on network speed")
+            console.print(
+                f"  [yellow]⚠[/yellow] This may take 30-60 minutes depending on network speed"
+            )
 
             try:
                 import subprocess
@@ -599,9 +612,15 @@ def build(
                 if outputs_dir.exists():
                     file_count = sum(1 for _ in outputs_dir.rglob("*") if _.is_file())
                     console.print(f"  [green]✓[/green] Downloaded {file_count} artifacts")
-                    return {"assets": str(outputs_dir), "status": "downloaded", "count": str(file_count)}
+                    return {
+                        "assets": str(outputs_dir),
+                        "status": "downloaded",
+                        "count": str(file_count),
+                    }
                 else:
-                    console.print(f"  [yellow]⚠[/yellow] Download completed but outputs directory not found")
+                    console.print(
+                        f"  [yellow]⚠[/yellow] Download completed but outputs directory not found"
+                    )
                     return {"assets": "", "status": "unknown"}
 
             except subprocess.TimeoutExpired:
@@ -619,7 +638,9 @@ def build(
             terraform_dir = Path("assets/terraform")
             if not terraform_dir.exists():
                 console.print(f"  [yellow]⚠[/yellow] No Terraform modules found at {terraform_dir}")
-                console.print(f"  [cyan]Skipping provider mirroring (OpenStack deployments only)[/cyan]")
+                console.print(
+                    f"  [cyan]Skipping provider mirroring (OpenStack deployments only)[/cyan]"
+                )
                 return {"providers": "", "status": "skipped", "reason": "no_terraform_modules"}
 
             # Check if terraform CLI is available
@@ -627,7 +648,9 @@ def build(
 
             if not shutil.which("terraform"):
                 console.print(f"  [yellow]⚠[/yellow] Terraform CLI not available")
-                console.print(f"  [cyan]Install terraform: https://www.terraform.io/downloads[/cyan]")
+                console.print(
+                    f"  [cyan]Install terraform: https://www.terraform.io/downloads[/cyan]"
+                )
                 return {"providers": "", "status": "skipped", "reason": "terraform_cli_not_found"}
 
             # Create mirror directory
@@ -661,21 +684,23 @@ def build(
 
                 # Count mirrored providers
                 provider_count = sum(1 for _ in mirror_dir.rglob("*.zip") if _.is_file())
-                console.print(f"  [green]✓[/green] Mirrored {provider_count} providers to {mirror_dir}")
+                console.print(
+                    f"  [green]✓[/green] Mirrored {provider_count} providers to {mirror_dir}"
+                )
 
                 # Generate .terraformrc for offline use
                 terraformrc = Path("assets/terraform-config/.terraformrc")
                 terraformrc.parent.mkdir(parents=True, exist_ok=True)
                 terraformrc.write_text(
-                    f'provider_installation {{\n'
-                    f'  filesystem_mirror {{\n'
+                    f"provider_installation {{\n"
+                    f"  filesystem_mirror {{\n"
                     f'    path    = "{mirror_dir.absolute()}"\n'
                     f'    include = ["*/*"]\n'
-                    f'  }}\n'
-                    f'  direct {{\n'
+                    f"  }}\n"
+                    f"  direct {{\n"
                     f'    exclude = ["*/*"]\n'
-                    f'  }}\n'
-                    f'}}\n'
+                    f"  }}\n"
+                    f"}}\n"
                 )
                 console.print(f"  [green]✓[/green] Generated .terraformrc for offline use")
 
@@ -722,8 +747,12 @@ def build(
             import shutil
 
             if not shutil.which("zarf"):
-                console.print(f"  [yellow]⚠[/yellow] Zarf CLI not available - skipping package creation")
-                console.print(f"  [cyan]Install zarf: https://docs.zarf.dev/getting-started/install/[/cyan]")
+                console.print(
+                    f"  [yellow]⚠[/yellow] Zarf CLI not available - skipping package creation"
+                )
+                console.print(
+                    f"  [cyan]Install zarf: https://docs.zarf.dev/getting-started/install/[/cyan]"
+                )
                 return {"package": "", "status": "skipped", "reason": "zarf_cli_not_found"}
 
             # Create package with zarf CLI
@@ -752,7 +781,9 @@ def build(
                     console.print(f"  [green]✓[/green] Created package: {package_path}")
                     return {"package": str(package_path), "status": "created"}
                 else:
-                    console.print(f"  [yellow]⚠[/yellow] Package created but not found in {dist_dir}")
+                    console.print(
+                        f"  [yellow]⚠[/yellow] Package created but not found in {dist_dir}"
+                    )
                     return {"package": "", "status": "unknown"}
 
             except subprocess.TimeoutExpired:
@@ -1633,8 +1664,12 @@ def version() -> None:
 
 @app.command()
 def release(
-    version: Optional[str] = typer.Argument(None, help="Version to release (e.g., 1.0.0 or v1.0.0)"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without creating tag"),
+    version: Optional[str] = typer.Argument(
+        None, help="Version to release (e.g., 1.0.0 or v1.0.0)"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be done without creating tag"
+    ),
     force: bool = typer.Option(False, "--force", help="Skip confirmation prompt"),
 ) -> None:
     """Create a release tag and push to trigger CI/CD.
@@ -1665,6 +1700,7 @@ def release(
                 raise typer.Exit(code=1)
 
             import tomli
+
             with open(pyproject_path, "rb") as f:
                 pyproject = tomli.load(f)
 
@@ -1758,16 +1794,18 @@ def release(
 
         # Display release info
         console.print()
-        console.print(Panel.fit(
-            f"[bold]Release Information[/bold]\n\n"
-            f"Version: [cyan]{version}[/cyan]\n"
-            f"Branch: [cyan]{current_branch}[/cyan]\n"
-            f"Commit: [cyan]{latest_commit}[/cyan]\n"
-            f"Remote: [cyan]{remote_url}[/cyan]\n"
-            f"Time: [cyan]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/cyan]",
-            title="Release",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold]Release Information[/bold]\n\n"
+                f"Version: [cyan]{version}[/cyan]\n"
+                f"Branch: [cyan]{current_branch}[/cyan]\n"
+                f"Commit: [cyan]{latest_commit}[/cyan]\n"
+                f"Remote: [cyan]{remote_url}[/cyan]\n"
+                f"Time: [cyan]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/cyan]",
+                title="Release",
+                border_style="cyan",
+            )
+        )
 
         if dry_run:
             console.print("\n[yellow]Dry run - no changes made[/yellow]")
@@ -1826,14 +1864,16 @@ def release(
             actions_url = f"https://github.com/{repo_path}/actions"
 
             console.print()
-            console.print(Panel.fit(
-                f"[bold green]Release tag created successfully![/bold green]\n\n"
-                f"GitHub Actions will build and publish the release.\n\n"
-                f"Monitor progress:\n"
-                f"[cyan]{actions_url}[/cyan]",
-                title="Success",
-                border_style="green",
-            ))
+            console.print(
+                Panel.fit(
+                    f"[bold green]Release tag created successfully![/bold green]\n\n"
+                    f"GitHub Actions will build and publish the release.\n\n"
+                    f"Monitor progress:\n"
+                    f"[cyan]{actions_url}[/cyan]",
+                    title="Success",
+                    border_style="green",
+                )
+            )
         else:
             console.print()
             console.print("[bold green]Release tag created successfully![/bold green]")
