@@ -12,6 +12,8 @@ Modules:
     image_utils: Container image parsing and manipulation
     version_utils: Version validation and comparison
     zarf_utils: Zarf package generation utilities
+    scanner: Repository scanner for container image discovery
+    orchestrator: Build orchestration with checkpoint/resume
 """
 
 __version__ = "1.0.0"
@@ -25,4 +27,6 @@ __all__ = [
     "image_utils",
     "version_utils",
     "zarf_utils",
+    "scanner",
+    "orchestrator",
 ]

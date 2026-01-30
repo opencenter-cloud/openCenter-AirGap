@@ -2,13 +2,24 @@
 
 openCenter AirGap is a turnkey solution for deploying High Availability Kubernetes clusters in completely air-gapped (disconnected) environments.
 
-## Core Purpose
+## Purpose
 
-Deploy production-grade Kubernetes infrastructure without internet connectivity by packaging all dependencies into a single cryptographically verifiable artifact.
+Package all dependencies into a single cryptographically verifiable artifact.
 
-## Key Innovation
+## Mission
 
-"Disconnected-First" design philosophy: internet isolation is the baseline constraint, not an exception. A single Zarf package contains everything needed to provision infrastructure, bootstrap Kubernetes, and deploy core platform services.
+Eliminate internet connectivity as a deployment constraint. A single Zarf package contains everything needed to provision infrastructure, bootstrap Kubernetes, and deploy core platform services—no external downloads required.
+
+## Vision
+
+"Disconnected-First" design philosophy where air-gap isolation is the baseline constraint, not an exception. Enable field operators to deploy identical, reproducible Kubernetes environments at edge sites with the same confidence as cloud deployments.
+
+## Target Outcomes
+
+- Platform engineers build once, deploy anywhere (bare-metal, OpenStack)
+- Security officers verify SBOM and artifact integrity before deployment
+- Field operators deploy without network troubleshooting or dependency hunting
+- Platform architects standardize operating environments across disconnected sites
 
 ## Target Users
 

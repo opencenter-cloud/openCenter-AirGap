@@ -1,0 +1,129 @@
+# Component Manifest Example
+#
+# This file declares what to collect for air-gap deployment.
+# Edit this file to add tools, repositories, images, and charts.
+#
+# Generate Zarf manifest: opencenter-airgap generate-manifest
+# Build package: opencenter-airgap build
+
+# Kubernetes core components
+kubernetes:
+  version: "1.34.3"
+  binaries:
+    - name: kubectl
+      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubectl"
+    - name: kubelet
+      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubelet"
+    - name: kubeadm
+      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubeadm"
+
+# CLI tools
+tools:
+  # Helm package manager
+  - name: helm
+    version: "3.14.0"
+    url: "https://get.helm.sh/helm-v{{version}}-linux-amd64.tar.gz"
+    extract: true
+    binary: linux-amd64/helm
+
+  # k9s Kubernetes CLI
+  - name: k9s
+    version: "0.32.4"
+    url: "https://github.com/derailed/k9s/releases/download/v{{version}}/k9s_Linux_amd64.tar.gz"
+    extract: true
+    binary: k9s
+
+  # Flux CLI
+  - name: flux
+    version: "2.2.0"
+    url: "https://github.com/fluxcd/flux2/releases/download/v{{version}}/flux_{{version}}_linux_amd64.tar.gz"
+    extract: true
+    binary: flux
+
+# Git repositories
+repositories:
+  # Kubespray for Kubernetes deployment
+  - name: kubespray
+    url: "https://github.com/kubernetes-sigs/kubespray.git"
+    ref: "master"
+
+  # openCenter GitOps base
+  - name: opencenter-gitops-base
+    url: "https://github.com/rackerlabs/opencenter-gitops-base.git"
+    ref: "v1.0.0"
+
+# Container images
+images:
+  # Auto-discover images from repositories
+  auto_discover:
+    # Scan Kubespray for Kubernetes component images
+    - source: repositories.kubespray
+      patterns:
+        - "roles/*/defaults/main.yml"
+        - "inventory/*/group_vars/*.yml"
+
+    # Scan GitOps base for application images
+    - source: repositories.opencenter-gitops-base
+      patterns:
+        - "**/*.yaml"
+        - "**/*.yml"
+
+  # Explicit image additions
+  additional:
+    # Monitoring stack
+    - "docker.io/grafana/grafana:10.2.0"
+    - "quay.io/prometheus/prometheus:v2.48.0"
+    - "quay.io/prometheus/alertmanager:v0.26.0"
+    - "quay.io/prometheus/node-exporter:v1.7.0"
+
+    # Logging stack
+    - "docker.io/fluent/fluent-bit:2.2.0"
+    - "docker.io/grafana/loki:2.9.0"
+
+    # Service mesh
+    - "docker.io/istio/proxyv2:1.20.0"
+    - "docker.io/istio/pilot:1.20.0"
+
+# Helm charts
+charts:
+  # cert-manager for TLS certificates
+  - name: cert-manager
+    repo: "https://charts.jetstack.io"
+    version: "v1.13.0"
+
+  # ingress-nginx for ingress controller
+  - name: ingress-nginx
+    repo: "https://kubernetes.github.io/ingress-nginx"
+    version: "4.8.3"
+
+  # kube-prometheus-stack for monitoring
+  - name: kube-prometheus-stack
+    repo: "https://prometheus-community.github.io/helm-charts"
+    version: "55.5.0"
+
+  # Keycloak for identity management
+  - name: keycloak
+    repo: "https://charts.bitnami.com/bitnami"
+    version: "18.4.0"
+
+# OS packages (collected by kubespray-offline)
+os_packages:
+  ubuntu_24_04: true
+
+# Python packages (collected by kubespray-offline)
+python_packages:
+  requirements_file: "requirements.txt"
+
+# Terraform providers (OpenStack deployments only)
+terraform_providers:
+  - name: openstack
+    version: "1.54.1"
+    platform: "linux_amd64"
+
+  - name: local
+    version: "2.4.0"
+    platform: "linux_amd64"
+
+  - name: null
+    version: "3.2.1"
+    platform: "linux_amd64"

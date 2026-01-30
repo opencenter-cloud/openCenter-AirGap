@@ -19,6 +19,8 @@ Step-by-step guided learning for building confidence.
 Task-focused recipes for getting work done.
 
 **Build**
+- [Component Manifest Guide](how-to/component-manifest.md) - Create and maintain component manifests
+- [Migrate from Bash Scripts](how-to/migrate-from-bash.md) - Migrate to Python build tool
 - [Build Air-Gap Package](how-to/build/build-air-gap-package.md)
 - [Update Component Versions](how-to/build/update-component-versions.md)
 - [Add Custom Images](how-to/build/add-custom-images.md)
@@ -43,6 +45,11 @@ Task-focused recipes for getting work done.
 ### Reference (Information Lookup)
 Precise technical specifications and parameters.
 
+**CLI**
+- [CLI Command Reference](reference/cli-commands.md) - Complete command reference
+- [Component Manifest Schema](reference/component-manifest-schema.md) - Schema specification
+- [Troubleshooting Guide](reference/troubleshooting.md) - Common issues and solutions
+
 **Configuration**
 - [Zarf Variables](reference/configuration/zarf-variables.md)
 - [Kubespray Variables](reference/configuration/kubespray-variables.md)
@@ -58,6 +65,9 @@ Precise technical specifications and parameters.
 
 ### Understanding (Explanations)
 Concepts, design decisions, and context.
+
+**Manifests**
+- [Manifest Taxonomy](explanation/manifest-taxonomy.md) - Understanding the three manifest types
 
 **Architecture**
 - [Architecture Overview](explanation/architecture/architecture-overview.md)

@@ -22,21 +22,27 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "jsonschema>=4.0",
-    "pyyaml>=6.0",
+    "jsonschema==4.21.1",
+    "pyyaml==6.0.1",
+    "typer==0.21.1",
+    "rich==13.7.0",
+    "python-dotenv==1.0.1",
 ]
+
+[project.scripts]
+opencenter-airgap = "opencenter_build.cli:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0",
-    "pytest-timeout>=2.1",
-    "pytest-cov>=4.0",
-    "hypothesis>=6.0",
-    "black>=23.0",
-    "mypy>=1.0",
-    "pylint>=2.17",
-    "types-PyYAML>=6.0",
-    "pre-commit>=3.0",
+    "pytest==7.4.4",
+    "pytest-timeout==2.2.0",
+    "pytest-cov==4.1.0",
+    "hypothesis==6.98.3",
+    "black==24.1.1",
+    "mypy==1.8.0",
+    "pylint==3.0.3",
+    "types-PyYAML==6.0.12.12",
+    "pre-commit==3.6.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -79,6 +85,14 @@ module = "jsonschema.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "typer.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "rich.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
 
@@ -98,10 +112,18 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "-ra",
+    "-v",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "property: marks tests as property-based tests",
+]
+timeout = 300
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
 ]
 
 [tool.coverage.run]

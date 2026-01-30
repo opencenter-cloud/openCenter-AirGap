@@ -124,3 +124,11 @@ class ConfigError(OpenCenterError):
     Raised when configuration files cannot be loaded, parsed, or contain
     syntax errors.
     """
+
+
+class ScanError(OpenCenterError):
+    """Repository scanning operation failed.
+
+    Raised when repository scanning fails catastrophically, such as
+    worker process failures or file system errors.
+    """

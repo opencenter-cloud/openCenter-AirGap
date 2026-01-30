@@ -6,9 +6,13 @@ before asset collection begins.
 
 Classes:
     ConfigValidator: Validates configuration files against JSON schemas
+    ComprehensiveConfigValidator: Validates complete build configuration
 """
 
 import json
+import shutil
+import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
 
@@ -179,3 +183,321 @@ class ConfigValidator:
         """
         schema = self._load_schema("zarf-variables.schema.json")
         self._validate_against_schema(config, schema, "Zarf variables")
+
+
+@dataclass
+class ValidationResult:
+    """Result of configuration validation.
+
+    Attributes:
+        errors: List of validation errors (critical issues)
+        warnings: List of validation warnings (non-critical issues)
+        passed: Whether validation passed (no errors)
+    """
+
+    errors: list[str]
+    warnings: list[str]
+
+    @property
+    def passed(self) -> bool:
+        """Check if validation passed (no errors)."""
+        return len(self.errors) == 0
+
+    @property
+    def has_warnings(self) -> bool:
+        """Check if validation has warnings."""
+        return len(self.warnings) > 0
+
+
+class ComprehensiveConfigValidator:
+    """Comprehensive configuration validator for build system.
+
+    Validates all aspects of build configuration including:
+    - versions.env file existence and required variables
+    - Repository paths
+    - External dependencies (Zarf, Docker)
+    - Component manifest (if present)
+
+    This validator implements Requirements 10.1, 10.2, 10.4, 10.5.
+    """
+
+    # Required variables in versions.env
+    REQUIRED_VARIABLES = [
+        "KUBERNETES_VERSION",
+        "KUBESPRAY_VERSION",
+        "KUBESPRAY_COMMIT_SHA",
+        "UBUNTU_VERSION",
+        "CONTAINER_RUNTIME",
+        "CNI_PLUGIN",
+        "TERRAFORM_VERSION",
+        "FLUXCD_VERSION",
+        "GITEA_VERSION",
+        "CERT_MANAGER_VERSION",
+        "INGRESS_NGINX_VERSION",
+        "KEYCLOAK_VERSION",
+        "PROMETHEUS_VERSION",
+        "GRAFANA_VERSION",
+        "OPENCENTER_GITOPS_BASE_REPO",
+        "OPENCENTER_GITOPS_BASE_VERSION",
+        "OPENCENTER_GITOPS_BASE_COMMIT_SHA",
+        "OPENCENTER_CONTAINER_REGISTRY",
+        "TARGET_ARCH",
+        "PYTHON_VERSION",
+    ]
+
+    def __init__(self, config_file: Path = Path("config/versions.env")):
+        """Initialize validator.
+
+        Args:
+            config_file: Path to versions.env configuration file
+        """
+        self.config_file = config_file
+
+    def validate_all(
+        self,
+        check_repos: bool = True,
+        check_dependencies: bool = True,
+        check_component_manifest: bool = True,
+        component_manifest_path: Path | None = None,
+    ) -> ValidationResult:
+        """Validate all configuration aspects.
+
+        Args:
+            check_repos: Check repository paths exist
+            check_dependencies: Check external dependencies (Zarf, Docker)
+            check_component_manifest: Check component manifest if present
+            component_manifest_path: Path to component manifest (default: config/components.yaml)
+
+        Returns:
+            ValidationResult with errors and warnings
+
+        Example:
+            >>> validator = ComprehensiveConfigValidator()
+            >>> result = validator.validate_all()
+            >>> if not result.passed:
+            ...     print(f"Validation failed: {result.errors}")
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        # 1. Validate versions.env exists (Requirement 10.1)
+        versions_result = self._validate_versions_env()
+        errors.extend(versions_result.errors)
+        warnings.extend(versions_result.warnings)
+
+        # 2. Check repository paths if requested
+        if check_repos and component_manifest_path:
+            repos_result = self._validate_repository_paths(component_manifest_path)
+            errors.extend(repos_result.errors)
+            warnings.extend(repos_result.warnings)
+
+        # 3. Check external dependencies (Requirement 10.5)
+        if check_dependencies:
+            deps_result = self._validate_external_dependencies()
+            errors.extend(deps_result.errors)
+            warnings.extend(deps_result.warnings)
+
+        # 4. Check component manifest if requested
+        if check_component_manifest and component_manifest_path:
+            manifest_result = self._validate_component_manifest(component_manifest_path)
+            errors.extend(manifest_result.errors)
+            warnings.extend(manifest_result.warnings)
+
+        return ValidationResult(errors=errors, warnings=warnings)
+
+    def _validate_versions_env(self) -> ValidationResult:
+        """Validate versions.env file.
+
+        Checks:
+        - File exists (Requirement 10.1)
+        - All required variables are defined (Requirement 10.2)
+
+        Returns:
+            ValidationResult with errors and warnings
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        # Check file exists
+        if not self.config_file.exists():
+            errors.append(f"Configuration file not found: {self.config_file}")
+            return ValidationResult(errors=errors, warnings=warnings)
+
+        # Parse file
+        try:
+            from opencenter_build.config import parse_versions_env
+
+            versions = parse_versions_env(self.config_file)
+        except Exception as exc:
+            errors.append(f"Failed to parse {self.config_file}: {exc}")
+            return ValidationResult(errors=errors, warnings=warnings)
+
+        # Check required variables (Requirement 10.2)
+        missing_vars = [var for var in self.REQUIRED_VARIABLES if var not in versions]
+        if missing_vars:
+            errors.append(
+                f"Missing required variables in {self.config_file}: " f"{', '.join(missing_vars)}"
+            )
+
+        # Check for empty values
+        empty_vars = [var for var, value in versions.items() if not value.strip()]
+        if empty_vars:
+            warnings.append(f"Empty values for variables: {', '.join(empty_vars)}")
+
+        return ValidationResult(errors=errors, warnings=warnings)
+
+    def _validate_repository_paths(self, component_manifest_path: Path) -> ValidationResult:
+        """Validate repository paths exist.
+
+        Checks that repositories specified in component manifest have been
+        cloned to build/ directory (Requirement 10.4).
+
+        Args:
+            component_manifest_path: Path to component manifest
+
+        Returns:
+            ValidationResult with errors and warnings
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        if not component_manifest_path.exists():
+            # Not an error - component manifest is optional
+            return ValidationResult(errors=errors, warnings=warnings)
+
+        try:
+            from opencenter_build.component_manifest import ComponentManifest
+
+            manifest = ComponentManifest.from_yaml(component_manifest_path)
+
+            # Check each repository
+            for repo_spec in manifest.repositories:
+                repo_path = Path("build") / repo_spec.name
+                if not repo_path.exists():
+                    warnings.append(
+                        f"Repository not cloned: {repo_path} " f"(from {repo_spec.url})"
+                    )
+                elif not (repo_path / ".git").exists():
+                    warnings.append(f"Directory exists but is not a git repository: {repo_path}")
+
+        except Exception as exc:
+            errors.append(f"Failed to validate repository paths: {exc}")
+
+        return ValidationResult(errors=errors, warnings=warnings)
+
+    def _validate_external_dependencies(self) -> ValidationResult:
+        """Validate external dependencies are installed.
+
+        Checks:
+        - Zarf is installed and accessible (Requirement 10.5)
+        - Docker/Podman is installed (optional, warning only)
+
+        Returns:
+            ValidationResult with errors and warnings
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        # Check Zarf (required)
+        zarf_path = shutil.which("zarf")
+        if not zarf_path:
+            errors.append(
+                "Zarf not found in PATH. Install from: "
+                "https://docs.zarf.dev/getting-started/install/"
+            )
+        else:
+            # Try to get Zarf version
+            try:
+                result = subprocess.run(
+                    ["zarf", "version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    # Version check successful
+                    pass
+                else:
+                    warnings.append(f"Zarf found but version check failed: {result.stderr}")
+            except subprocess.TimeoutExpired:
+                warnings.append("Zarf version check timed out")
+            except Exception as exc:
+                warnings.append(f"Failed to check Zarf version: {exc}")
+
+        # Check Docker or Podman (optional, warning only)
+        docker_path = shutil.which("docker")
+        podman_path = shutil.which("podman")
+
+        if not docker_path and not podman_path:
+            warnings.append(
+                "Neither Docker nor Podman found in PATH. "
+                "Container runtime required for some operations."
+            )
+
+        return ValidationResult(errors=errors, warnings=warnings)
+
+    def _validate_component_manifest(self, component_manifest_path: Path) -> ValidationResult:
+        """Validate component manifest file.
+
+        Checks that component manifest can be loaded and parsed.
+
+        Args:
+            component_manifest_path: Path to component manifest
+
+        Returns:
+            ValidationResult with errors and warnings
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        if not component_manifest_path.exists():
+            # Not an error - component manifest is optional
+            warnings.append(f"Component manifest not found: {component_manifest_path}")
+            return ValidationResult(errors=errors, warnings=warnings)
+
+        try:
+            from opencenter_build.component_manifest import ComponentManifest
+
+            manifest = ComponentManifest.from_yaml(component_manifest_path)
+
+            # Basic sanity checks
+            if not manifest.repositories and not manifest.tools:
+                warnings.append("Component manifest has no repositories or tools defined")
+
+        except Exception as exc:
+            errors.append(f"Failed to load component manifest: {exc}")
+
+        return ValidationResult(errors=errors, warnings=warnings)
+
+    def validate_versions_env_format(self, versions: dict[str, str]) -> ValidationResult:
+        """Validate versions.env format and required variables.
+
+        This method validates a parsed versions.env dictionary rather than
+        reading from file. Useful for testing and programmatic validation.
+
+        Args:
+            versions: Dictionary of version variables
+
+        Returns:
+            ValidationResult with errors and warnings
+
+        Example:
+            >>> validator = ComprehensiveConfigValidator()
+            >>> versions = {"KUBERNETES_VERSION": "v1.34.3", ...}
+            >>> result = validator.validate_versions_env_format(versions)
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        # Check required variables (Requirement 10.2)
+        missing_vars = [var for var in self.REQUIRED_VARIABLES if var not in versions]
+        if missing_vars:
+            errors.append(f"Missing required variables: {', '.join(missing_vars)}")
+
+        # Check for empty values
+        empty_vars = [var for var, value in versions.items() if not value.strip()]
+        if empty_vars:
+            warnings.append(f"Empty values for variables: {', '.join(empty_vars)}")
+
+        return ValidationResult(errors=errors, warnings=warnings)

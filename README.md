@@ -1,525 +1,660 @@
-# openCenter AirGap
+# openCenter AirGap Build System
 
-![Test Coverage](https://img.shields.io/badge/coverage-72%25-yellow)
-![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
-![License](https://img.shields.io/badge/license-Apache%202.0-green)
+**doc_type: reference**
 
-Production-grade Kubernetes deployment for completely disconnected environments. Single cryptographically verifiable artifact containing all dependencies for infrastructure provisioning, cluster bootstrap, and core services.
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ ZONE A: FACTORY (Connected Build Environment)                      │
-│                                                                     │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐          │
-│  │ kubespray-   │──▶│ Asset        │──▶│ Zarf Package │          │
-│  │ offline      │   │ Collection   │   │ Creation     │          │
-│  │              │   │              │   │              │          │
-│  │ • K8s images │   │ • Organize   │   │ • Compress   │          │
-│  │ • Binaries   │   │ • Validate   │   │ • SBOM       │          │
-│  │ • Packages   │   │ • Terraform  │   │ • Sign       │          │
-│  └──────────────┘   └──────────────┘   └──────────────┘          │
-│                                              │                      │
-└──────────────────────────────────────────────┼──────────────────────┘
-                                               │
-                                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ ZONE B: AIRLOCK (Secure Transport)                                 │
-│                                                                     │
-│  ┌───────────────────────────────────────────────────────────┐    │
-│  │ openCenter-airgap-amd64-1.0.0.tar.zst                     │    │
-│  │ • Immutable, signed artifact                              │    │
-│  │ • SBOM embedded                                           │    │
-│  │ • Checksum manifest                                       │    │
-│  └───────────────────────────────────────────────────────────┘    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-                                               │
-                                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ ZONE C: FIELD (Disconnected Deployment)                            │
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────┐      │
-│  │ BASTION HOST (192.168.1.5)                              │      │
-│  │                                                          │      │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐             │      │
-│  │  │ Registry │  │ Nginx    │  │ Kubespray│             │      │
-│  │  │ :35000   │  │ :80      │  │ Ansible  │             │      │
-│  │  └──────────┘  └──────────┘  └──────────┘             │      │
-│  │       │              │              │                   │      │
-│  └───────┼──────────────┼──────────────┼───────────────────┘      │
-│          │              │              │                           │
-│          │              │              ▼                           │
-│  ┌───────┼──────────────┼──────────────────────────────────┐     │
-│  │       │              │         KUBERNETES CLUSTER        │     │
-│  │       │              │                                   │     │
-│  │  ┌────▼────┐    ┌───▼────┐    ┌──────────┐            │     │
-│  │  │ Control │    │ Control│    │ Control  │            │     │
-│  │  │ Plane 1 │    │ Plane 2│    │ Plane 3  │            │     │
-│  │  └─────────┘    └────────┘    └──────────┘            │     │
-│  │       │              │              │                   │     │
-│  │  ┌────▼────┐    ┌───▼────┐    ┌───▼──────┐           │     │
-│  │  │ Worker 1│    │ Worker 2│    │ Worker N │           │     │
-│  │  └─────────┘    └─────────┘    └──────────┘           │     │
-│  │       │              │              │                   │     │
-│  │       └──────────────┴──────────────┘                   │     │
-│  │                      │                                   │     │
-│  │              Pull images from                            │     │
-│  │              bastion:35000                               │     │
-│  │              Install packages from                       │     │
-│  │              bastion:80                                  │     │
-│  └──────────────────────────────────────────────────────────┘     │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+Build tool for creating air-gapped Kubernetes deployment packages. Collects container images, binaries, OS packages, and Python dependencies into a single cryptographically verifiable Zarf artifact.
 
 ## Quick Start
 
-### Prerequisites
-
-**Zone A (Build)**:
-- Ubuntu 24.04 with internet access
-- Python 3.10+
-- **Skopeo** (container image operations) - `sudo apt-get install skopeo`
-- **Podman** (container runtime) - `sudo apt-get install podman`
-- **Trivy** (vulnerability scanning) - See installation below
-- Zarf CLI
-- 100GB+ disk space
-
-**Zone C (Deploy)**:
-- Bastion host: Ubuntu 24.04, 100GB disk, podman
-- Target nodes: Ubuntu 24.04, SSH access
-- Network connectivity between bastion and nodes
-
-**Container Tools**:
 ```bash
-# Install Skopeo and Podman (Ubuntu 24.04)
-sudo apt-get update
-sudo apt-get install -y skopeo podman
+# Install binary
+curl -LO https://github.com/rackerlabs/opencenter-airgap/releases/latest/download/opencenter-airgap
+chmod +x opencenter-airgap
+sudo mv opencenter-airgap /usr/local/bin/
 
-# Verify installation
-skopeo --version  # Should show 1.13.x+
-podman --version  # Should show 4.3.x+
+# Initialize configuration
+opencenter-airgap init --create-manifest
 
-# Install Trivy (vulnerability scanner)
-curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+# Add components
+opencenter-airgap add tool helm 3.14.0 https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz
+opencenter-airgap add repo kubespray https://github.com/kubernetes-sigs/kubespray.git master
 
-# Verify Trivy installation
-trivy --version  # Should show latest stable version
+# Build package
+opencenter-airgap build
+
+# Deploy (on air-gapped bastion)
+opencenter-airgap serve dist/zarf-package-*.tar.zst
 ```
 
-**Why Skopeo and Podman?**
-- **Daemonless**: No background services required
-- **Rootless**: Can run without root privileges
-- **Air-gap optimized**: Direct registry-to-directory copies
-- **Docker-free**: No Docker daemon dependency
+## Prerequisites
 
-### Build (Zone A)
+**Build Environment (Zone A - Connected)**:
+- Ubuntu 24.04 AMD64
+- 100GB+ free disk space
+- Internet access
+- Python 3.10+ (if running from source)
 
-```bash
-# 1. Clone repository
-git clone <repo-url>
-cd opencenter-airgap
+**Deployment Environment (Zone C - Air-Gapped)**:
+- Ubuntu 24.04 AMD64 bastion host
+- Docker or Podman runtime
+- 100GB+ free disk space
+- SSH access to target nodes
 
-# 2. Setup GitHub token for openCenter assets
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
-# Or create .env file: echo "GITHUB_TOKEN=ghp_xxxxxxxxxxxx" > .env
+## Commands
 
-# 3. Run build (30-60 minutes, Python environment created automatically)
-python3 scripts/build/build.py --clean
+### init
 
-# Output: dist/zarf-package-openCenter-airgap-amd64-1.0.0.tar.zst
-```
-
-Build system features:
-- Automatic resume after failures
-- Parallel execution of independent steps
-- State tracking and progress reporting
-- Comprehensive logging
-
-Resume after interruption:
-```bash
-# Resume from last incomplete step
-python3 scripts/build/build.py
-
-# Resume from specific step
-python3 scripts/build/build.py --from-step validate_versions
-
-# View build state
-cat build/.build-state.json | python3 -m json.tool
-```
-
-### Transfer (Zone B)
+Initialize project configuration and optionally create component manifest.
 
 ```bash
-# Copy package to removable media or secure transfer mechanism
-cp dist/zarf-package-openCenter-airgap-*.tar.zst /media/usb/
-
-# Verify checksums
-cat dist/zarf-package-openCenter-airgap-*.tar.zst.checksums
+opencenter-airgap init [OPTIONS]
 ```
 
-### Deploy (Zone C)
+**Options**:
+- `--create-manifest`: Create config/components.yaml from template
+- `--template TEXT`: Template name (baremetal, openstack)
+- `--config-file PATH`: Configuration file path (default: config/versions.env)
+
+**Example**:
+```bash
+opencenter-airgap init --create-manifest --template baremetal
+```
+
+### add
+
+Add component to manifest.
 
 ```bash
-# 1. Transfer package to bastion
-scp zarf-package-openCenter-airgap-*.tar.zst bastion:/opt/
-
-# 2. Deploy Zarf package (extracts and configures bastion)
-ssh bastion
-cd /opt
-zarf package deploy zarf-package-openCenter-airgap-*.tar.zst --confirm
-
-# 3. Create node inventory
-cat > nodes.yaml <<EOF
-control_plane:
-  - hostname: control-01
-    ip: 192.168.1.10
-  - hostname: control-02
-    ip: 192.168.1.11
-  - hostname: control-03
-    ip: 192.168.1.12
-workers:
-  - hostname: worker-01
-    ip: 192.168.1.20
-  - hostname: worker-02
-    ip: 192.168.1.21
-EOF
-
-# 4. Deploy cluster (20-30 minutes)
-/opt/opencenter/scripts/deploy.sh \
-  --mode baremetal \
-  --bastion-ip 192.168.1.5 \
-  --nodes nodes.yaml
-
-# 5. Verify cluster
-export KUBECONFIG=/opt/opencenter/outputs/kubespray-master/inventory/mycluster/artifacts/admin.conf
-kubectl get nodes
-kubectl get pods -A
+opencenter-airgap add COMPONENT_TYPE NAME [OPTIONS]
 ```
 
-## Deployment Flow
+**Arguments**:
+- `COMPONENT_TYPE`: tool, repo, image, or chart
+- `NAME`: Component name
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ 1. Package Verification                                         │
-│    • Validate checksums (MD5, SHA256)                           │
-│    • Verify Cosign signature (if signed)                        │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 2. Bastion Setup (kubespray-offline)                           │
-│    • Install containerd runtime                                 │
-│    • Start nginx:1.29.2 on port 80 (file/package server)      │
-│    • Start registry:2.8.3 on port 35000                        │
-│    • Load and push all K8s images to registry                  │
-│    • Create Python venv with Ansible                            │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 3. Infrastructure Provisioning (OpenStack only)                 │
-│    • Terraform init with filesystem mirror                      │
-│    • Provision control plane and worker VMs                     │
-│    • Generate Ansible inventory from outputs                    │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 4. Inventory Generation                                         │
-│    • Create Ansible hosts.yaml (bare-metal: from file)         │
-│    • Generate offline.yml with bastion IP                       │
-│    • Configure nodes to use bastion for packages/images         │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 5. Cluster Bootstrap (Kubespray)                               │
-│    • Extract kubespray-master tarball                           │
-│    • Run offline-repo.yml (configure apt/pip on nodes)         │
-│    • Run cluster.yml (install K8s)                             │
-│    • Export kubeconfig                                          │
-└────────────────────────────────┬────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ 6. Cluster Verification                                         │
-│    • Check control plane components healthy                     │
-│    • Verify all nodes in Ready state                            │
-│    • Generate deployment summary                                │
-└─────────────────────────────────────────────────────────────────┘
+**Options**:
+- `--version TEXT`: Component version
+- `--url TEXT`: Download URL (for tools)
+- `--ref TEXT`: Git ref (for repos)
+- `--repo TEXT`: Helm repository URL (for charts)
+
+**Examples**:
+```bash
+# Add CLI tool
+opencenter-airgap add tool k9s --version 0.32.4 \
+  --url https://github.com/derailed/k9s/releases/download/v0.32.4/k9s_Linux_amd64.tar.gz
+
+# Add Git repository
+opencenter-airgap add repo opencenter-gitops-base \
+  --url https://github.com/rackerlabs/opencenter-gitops-base.git \
+  --ref v1.0.0
+
+# Add container image
+opencenter-airgap add image docker.io/grafana/grafana:10.2.0
+
+# Add Helm chart
+opencenter-airgap add chart cert-manager --version v1.13.0 \
+  --repo https://charts.jetstack.io
 ```
 
-## Configuration
+### scan
 
-### Version Pinning
-
-All versions strictly pinned in `config/versions.env`:
-
-| Component | Version | Source |
-|:----------|:--------|:-------|
-| Kubernetes | v1.34.3 | kubespray@master |
-| Kubespray | master | git branch |
-| RUNC | 1.3.4 | kubespray-offline |
-| Containerd | 2.1.5 | kubespray-offline |
-| Nerdctl | 2.1.6 | kubespray-offline |
-| CNI | 1.8.0 | kubespray-offline |
-| Nginx | 1.29.2 | kubespray-offline |
-| Registry | 2.8.3 | kubespray-offline |
-| Calico | v3.29.1 | kubespray |
-
-### Bastion Services
-
-| Service | Port | Purpose | Data Location |
-|:--------|:-----|:--------|:--------------|
-| Registry | 35000 | Container image registry | /var/lib/registry |
-| Nginx | 80 | File/package server | /opt/opencenter/outputs |
-| Python venv | - | Ansible/Kubespray execution | ~/.venv/kubespray |
-
-### Network Requirements
-
-**Bastion → Nodes**:
-- SSH (22): Ansible execution
-- HTTP (80): Package downloads (optional, for verification)
-
-**Nodes → Bastion**:
-- HTTP (80): Apt packages, Python wheels, K8s binaries
-- HTTP (35000): Container image pulls
-
-**Nodes ↔ Nodes**:
-- Kubernetes API (6443)
-- etcd (2379-2380)
-- Kubelet (10250)
-- NodePort range (30000-32767)
-
-## Deployment Modes
-
-### Bare-metal
-
-Pre-provisioned nodes with Ubuntu 24.04. Provide inventory file with node IPs.
+Scan repositories for container images.
 
 ```bash
-/opt/opencenter/scripts/deploy.sh \
-  --mode baremetal \
-  --bastion-ip 192.168.1.5 \
-  --nodes nodes.yaml
+opencenter-airgap scan [OPTIONS]
 ```
 
-### OpenStack
+**Options**:
+- `--repos PATH`: Repository paths to scan (multiple allowed)
+- `--discover-images`: Discover images from component manifest repos
+- `--concurrency INTEGER`: Number of worker processes
+- `--verbose`: Enable verbose output
 
-Terraform provisions VMs, generates inventory automatically.
+**Example**:
+```bash
+opencenter-airgap scan --discover-images --concurrency 8
+```
+
+### generate-manifest
+
+Generate Zarf manifest from component manifest.
 
 ```bash
-# Create OpenStack config
-cat > openstack-config.yaml <<EOF
-auth_url: https://openstack.example.com:5000/v3
-project_name: my-project
-username: admin
-region: RegionOne
-control_plane_count: 3
-worker_count: 3
-flavor: m1.large
-image: ubuntu-24.04
-network: internal-net
-EOF
-
-# Deploy
-/opt/opencenter/scripts/deploy.sh \
-  --mode openstack \
-  --bastion-ip 192.168.1.5 \
-  --config openstack-config.yaml
+opencenter-airgap generate-manifest [OPTIONS]
 ```
 
-## Project Structure
+**Options**:
+- `--output PATH`: Output path for Zarf manifest (default: zarf.yaml)
 
-```
-.
-├── assets/                    # Zarf package assets
-│   ├── k8s-binaries/         # Kubernetes binaries
-│   ├── kubespray/            # Kubespray playbooks
-│   ├── playbook/             # offline-repo.yml
-│   ├── python-wheels/        # PyPI mirror
-│   ├── repos/                # Apt repository
-│   ├── target-scripts/       # Bastion setup scripts
-│   └── terraform-mirror/     # Terraform providers (OpenStack)
-├── build/
-│   └── kubespray-offline/    # Asset collection (git clone)
-├── config/
-│   └── versions.env          # Version pinning
-├── dist/                      # Built packages
-├── docs/                      # Documentation
-│   ├── build-runbook.md
-│   ├── deployment-runbook-baremetal.md
-│   ├── deployment-runbook-openstack.md
-│   └── troubleshooting-guide.md
-├── scripts/
-│   ├── build/
-│   │   ├── build.py          # Main build orchestrator
-│   │   ├── build_state.py    # State management
-│   │   ├── build_steps.py    # Step definitions
-│   │   ├── build_executor.py # Execution engine
-│   │   ├── workers/          # Python worker functions
-│   │   ├── organize_assets_for_zarf.sh
-│   │   ├── collect_kubespray_offline.sh
-│   │   └── collect_opencenter_assets.sh
-│   └── deploy/
-│       ├── deploy.sh         # Master deployment script
-│       ├── generate_inventory_baremetal.py
-│       ├── generate_offline_yml.py
-│       ├── verify_cluster_health.sh
-│       └── verify_bastion_services.sh
-├── tests/
-│   ├── integration/
-│   │   ├── test_kubespray_idempotency.sh
-│   │   └── test_kubespray_offline_idempotency.sh
-│   └── test_verify_sbom.py
-└── zarf.yaml                  # Zarf package definition
+**Example**:
+```bash
+opencenter-airgap generate-manifest --output zarf.yaml
 ```
 
-## Documentation
+### build
 
-Documentation organized by purpose using the [Diátaxis framework](docs/taxonomy.md).
+Build air-gap package with all artifacts.
 
-**New to openCenter?** Start with the [First Deployment Tutorial](docs/tutorials/01-first-deployment.md).
+```bash
+opencenter-airgap build [OPTIONS]
+```
 
-### By Purpose
+**Options**:
+- `--clean`: Clean build (ignore checkpoints)
+- `--resume/--no-resume`: Resume from checkpoint (default: true)
+- `--verbose`: Enable verbose output
 
-**Learning (Tutorials)**
-- [First Deployment](docs/tutorials/01-first-deployment.md) - Deploy your first cluster in 30 minutes
+**Example**:
+```bash
+# Initial build
+opencenter-airgap build
 
-**Problem-Solving (How-To Guides)**
-- [Build Air-Gap Package](docs/how-to/build/build-air-gap-package.md)
-- [Deploy Bare-Metal Cluster](docs/how-to/deploy/deploy-baremetal-cluster.md)
-- [Verify Cluster Health](docs/how-to/verify/verify-cluster-health.md)
+# Resume after failure
+opencenter-airgap build --resume
 
-**Reference (Lookup)**
-- [Zarf Variables](docs/reference/configuration/zarf-variables.md)
-- [Service Endpoints](docs/reference/architecture/service-endpoints.md)
+# Clean build
+opencenter-airgap build --clean
+```
 
-**Understanding (Explanations)**
-- [Three-Zone Model](docs/explanation/architecture/three-zone-model.md)
-- [Why Zarf](docs/explanation/design-decisions/why-zarf.md)
+### serve
 
-**Full documentation index**: [docs/README.md](docs/README.md)
+Deploy package and start bastion services.
+
+```bash
+opencenter-airgap serve PACKAGE [OPTIONS]
+```
+
+**Arguments**:
+- `PACKAGE`: Zarf package path
+
+**Options**:
+- `--verify/--no-verify`: Verify package signature (default: true)
+
+**Example**:
+```bash
+opencenter-airgap serve dist/zarf-package-opencenter-airgap-amd64-1.0.0.tar.zst
+```
+
+### validate
+
+Validate configuration files and schemas.
+
+```bash
+opencenter-airgap validate [OPTIONS]
+```
+
+**Options**:
+- `--strict`: Fail on warnings
+- `--check-upstream`: Verify URLs are reachable
+- `--config-file PATH`: Configuration file path (default: config/versions.env)
+
+**Example**:
+```bash
+opencenter-airgap validate --strict --check-upstream
+```
+
+### verify
+
+Verify package integrity and signatures.
+
+```bash
+opencenter-airgap verify PACKAGE [OPTIONS]
+```
+
+**Arguments**:
+- `PACKAGE`: Package path to verify
+
+**Options**:
+- `--manifest PATH`: Artifact manifest path for comparison
+
+**Example**:
+```bash
+opencenter-airgap verify dist/zarf-package-*.tar.zst \
+  --manifest dist/artifact-manifest.json
+```
+
+### status
+
+Show current build status and progress.
+
+```bash
+opencenter-airgap status
+```
+
+**Example**:
+```bash
+opencenter-airgap status
+```
+
+### clean
+
+Clean build artifacts and state.
+
+```bash
+opencenter-airgap clean
+```
+
+**Example**:
+```bash
+opencenter-airgap clean
+```
+
+### version
+
+Display tool version and dependencies.
+
+```bash
+opencenter-airgap version
+```
+
+**Example**:
+```bash
+opencenter-airgap version
+```
+
+## Component Manifest
+
+The component manifest (`config/components.yaml`) declares what to collect. It supports version templates, auto-discovery, and explicit additions.
+
+### Schema
+
+```yaml
+# Kubernetes core
+kubernetes:
+  version: "1.34.3"
+  binaries:
+    - name: kubectl
+      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubectl"
+    - name: kubelet
+      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubelet"
+
+# CLI tools
+tools:
+  - name: helm
+    version: "3.14.0"
+    url: "https://get.helm.sh/helm-v{{version}}-linux-amd64.tar.gz"
+    extract: true
+    binary: linux-amd64/helm
+
+# Git repositories
+repositories:
+  - name: kubespray
+    url: "https://github.com/kubernetes-sigs/kubespray.git"
+    ref: "master"
+
+# Container images
+images:
+  auto_discover:
+    - source: repositories.kubespray
+      patterns:
+        - "roles/*/defaults/main.yml"
+        - "inventory/*/group_vars/*.yml"
+  additional:
+    - "docker.io/grafana/grafana:10.2.0"
+
+# Helm charts
+charts:
+  - name: cert-manager
+    repo: "https://charts.jetstack.io"
+    version: "v1.13.0"
+
+# OS packages (collected by kubespray-offline)
+os_packages:
+  ubuntu_24_04: true
+
+# Python packages (collected by kubespray-offline)
+python_packages:
+  requirements_file: "requirements.txt"
+
+# Terraform providers (OpenStack only)
+terraform_providers:
+  - name: openstack
+    version: "1.54.1"
+    platform: "linux_amd64"
+```
+
+### Template Variables
+
+Use `{{variable}}` syntax for version interpolation:
+
+```yaml
+tools:
+  - name: kubectl
+    version: "1.34.3"
+    url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubectl"
+```
+
+Resolves to: `https://dl.k8s.io/v1.34.3/bin/linux/amd64/kubectl`
+
+### Auto-Discovery
+
+Discover images from repository files:
+
+```yaml
+images:
+  auto_discover:
+    - source: repositories.kubespray
+      patterns:
+        - "roles/*/defaults/main.yml"
+        - "inventory/*/group_vars/*.yml"
+```
+
+Scans matching files for image references like:
+- `image: quay.io/calico/node:v3.27.0`
+- `kube_image_repo: registry.k8s.io`
+
+## Manifest Taxonomy
+
+Three distinct manifests at different lifecycle stages:
+
+### 1. Component Manifest (Input)
+
+**File**: `config/components.yaml`
+**Phase**: Pre-build (Zone A)
+**Purpose**: Declarative specification of what to collect
+**Owner**: Platform engineer (manually edited)
+
+Contains:
+- Version templates (`{{version}}`)
+- Auto-discovery directives
+- No checksums (URLs not yet fetched)
+- Human-readable, version-controlled
+
+### 2. Zarf Manifest (Build Instructions)
+
+**File**: `zarf.yaml`
+**Phase**: Build (Zone A)
+**Purpose**: Zarf package definition - how to collect and bundle
+**Owner**: Generated by `opencenter-airgap generate-manifest`
+
+Contains:
+- Templates resolved
+- Auto-discovery expanded
+- Full image list (115+ images)
+- Zarf-native format
+
+### 3. Artifact Manifest (Output Inventory)
+
+**Files**: `dist/artifact-manifest.json`, `dist/artifact-manifest.md`
+**Phase**: Post-build (Zone A) / Pre-deploy (Zone B/C)
+**Purpose**: Cryptographic inventory of what was actually collected
+**Owner**: Generated by `opencenter-airgap build`
+
+Contains:
+- SHA256 checksums for every artifact
+- Actual sizes (bytes collected)
+- Resolved Git commit SHAs
+- Image digests (immutable content-addressable IDs)
+- Collection timestamps
+
+## Build Pipeline
+
+```
+Phase 1: Initialization
+  ├─ Load config/versions.env
+  ├─ Validate configuration
+  └─ Initialize state manager
+
+Phase 2: Asset Discovery
+  ├─ Scan repositories (concurrent)
+  ├─ Discover container images
+  └─ Write config/all-images.txt
+
+Phase 3: Asset Collection
+  ├─ Execute kubespray-offline (bash)
+  ├─ Collect OS packages → build/kubespray-offline/outputs/debs/
+  ├─ Collect PyPI mirror → build/kubespray-offline/outputs/pypi/
+  └─ Collect K8s binaries → build/kubespray-offline/outputs/files/
+
+Phase 4: Asset Organization
+  ├─ Copy to assets/ directory
+  ├─ Organize by type (images, files, debs, pypi)
+  └─ Generate checksums
+
+Phase 5: Zarf Package Creation
+  ├─ Generate zarf.yaml from versions.env
+  ├─ Execute zarf package create
+  └─ Output to dist/
+
+Phase 6: Manifest Generation
+  ├─ Inventory all artifacts
+  ├─ Calculate sizes and checksums
+  ├─ Export JSON manifest
+  └─ Export Markdown summary
+```
+
+## Checkpoint/Resume
+
+Build state persists to `build/state.json` after each step. Resume automatically skips completed steps.
+
+**State File**:
+```json
+{
+  "build_id": "20260130-143022",
+  "start_time": "2026-01-30T14:30:22Z",
+  "config_hash": "a1b2c3d4...",
+  "steps": [
+    {
+      "name": "scan_repositories",
+      "status": "completed",
+      "start_time": "2026-01-30T14:30:22Z",
+      "end_time": "2026-01-30T14:32:15Z"
+    },
+    {
+      "name": "collect_kubespray_offline",
+      "status": "failed",
+      "start_time": "2026-01-30T14:32:15Z",
+      "end_time": "2026-01-30T14:45:30Z",
+      "error": "Network timeout downloading kubernetes-cni"
+    }
+  ]
+}
+```
+
+**Resume**:
+```bash
+# Fix network issue, then resume
+opencenter-airgap build --resume
+```
+
+Skips `scan_repositories`, retries `collect_kubespray_offline`.
 
 ## Troubleshooting
 
-### Build Issues
+### Build fails with "Network timeout"
 
-**Build fails at specific step**:
+**Symptom**: Asset collection fails downloading artifacts.
+
+**Cause**: Transient network issues or rate limiting.
+
+**Solution**:
 ```bash
+# Resume build after network recovers
+opencenter-airgap build --resume
+```
+
+### Build fails with "Disk space"
+
+**Symptom**: Build fails with "No space left on device".
+
+**Cause**: Insufficient disk space (requires 100GB+).
+
+**Solution**:
+```bash
+# Check available space
+df -h
+
+# Clean previous builds
+opencenter-airgap clean
+
+# Retry
+opencenter-airgap build
+```
+
+### Image discovery misses images
+
+**Symptom**: Expected images not in `config/all-images.txt`.
+
+**Cause**: Images not in scanned file patterns.
+
+**Solution**:
+```bash
+# Add explicit images to component manifest
+opencenter-airgap add image docker.io/missing/image:tag
+
+# Or expand discovery patterns in config/components.yaml
+```
+
+### Zarf package deploy fails
+
+**Symptom**: `zarf package deploy` fails with signature error.
+
+**Cause**: Package signature verification failed.
+
+**Solution**:
+```bash
+# Verify package integrity
+opencenter-airgap verify dist/zarf-package-*.tar.zst
+
+# Deploy without verification (not recommended)
+opencenter-airgap serve dist/zarf-package-*.tar.zst --no-verify
+```
+
+### Services not accessible after deploy
+
+**Symptom**: Cannot access registry or nginx after deployment.
+
+**Cause**: Services not started or port conflicts.
+
+**Solution**:
+```bash
+# Check service status
+docker ps
+
 # Check logs
-tail -100 build/build-*.log | grep ERROR
+docker logs <container-id>
 
-# Resume after fixing issue
-python3 scripts/build/build.py
+# Verify ports
+netstat -tlnp | grep -E '(80|5000|3000)'
 
-# Skip problematic step temporarily
-python3 scripts/build/build.py --skip-step problematic_step
+# Restart services
+docker restart <container-id>
 ```
 
-**Prerequisites check fails**:
+### Build state corrupted
+
+**Symptom**: Resume fails with "Invalid state file".
+
+**Cause**: Corrupted `build/state.json`.
+
+**Solution**:
 ```bash
-# Check what's missing
-python3 scripts/build/build.py --clean 2>&1 | grep "✗"
-
-# Install missing tools
-sudo apt-get install git jq skopeo podman zarf
+# Clean state and rebuild
+opencenter-airgap clean
+opencenter-airgap build
 ```
 
-**kubespray-offline download fails**:
+## Migration from Bash Scripts
+
+### Key Differences
+
+| Aspect | Bash Scripts | Python Tool |
+|--------|--------------|-------------|
+| **Entry Point** | `./scripts/build/create_package.sh` | `opencenter-airgap build` |
+| **Configuration** | `config/versions.env` | `config/versions.env` + `config/components.yaml` |
+| **Scanning** | Sequential (8.5 min) | Concurrent (2.1 min) |
+| **Resume** | Manual checkpoint scripts | Automatic checkpoint/resume |
+| **Progress** | Text logs | Rich progress bars |
+| **Validation** | Manual verification | Built-in `validate` and `verify` commands |
+
+### Migration Steps
+
+1. **Install Python tool**:
 ```bash
-# Check network connectivity
-curl -I https://github.com
-
-# Resume (will retry failed downloads)
-python3 scripts/build/build.py
-
-# Force re-download
-python3 scripts/build/build.py --force --from-step clone_kubespray_offline
+pip install -e .
+# or use binary
+curl -LO https://github.com/rackerlabs/opencenter-airgap/releases/latest/download/opencenter-airgap
+chmod +x opencenter-airgap
 ```
 
-**Build state corrupted**:
+2. **Create component manifest**:
 ```bash
-# Start fresh
-python3 scripts/build/build.py --clean
-
-# Or manually delete state
-rm build/.build-state.json
-rm -rf build/.completed/
+opencenter-airgap init --create-manifest
 ```
 
-**Package size exceeds 10GB**:
+3. **Migrate version pins**:
 ```bash
-# Check asset sizes
-du -sh build/kubespray-offline/outputs/*
-
-# Remove unnecessary images from config/opencenter-images.txt
+# Existing config/versions.env is compatible
+# No changes needed
 ```
 
-**Disk space exhausted during build**:
+4. **Add custom components**:
 ```bash
-# Clean container cache
-podman system prune -a -f
-
-# Clean build artifacts
-rm -rf build/kubespray-offline/outputs
-python3 scripts/build/build.py --clean
-
-# Check available space (need 100GB+)
-df -h .
+# If you added custom tools/images in bash scripts
+opencenter-airgap add tool mytool 1.0.0 https://example.com/mytool.tar.gz
+opencenter-airgap add image docker.io/myorg/myimage:1.0.0
 ```
 
-### Deployment Issues
-
-**Registry startup fails (port conflict)**:
+5. **Build with Python tool**:
 ```bash
-# Check existing containers
-podman ps -a | grep registry
-
-# Stop conflicting container
-podman stop <container-id>
-
-# Re-run setup
-cd /opt/opencenter/outputs
-./target-scripts/setup-all.sh
+opencenter-airgap build
 ```
 
-**Kubespray fails (node unreachable)**:
+6. **Verify output compatibility**:
 ```bash
-# Verify SSH access
-ansible -i inventory/mycluster/hosts.yaml all -m ping
-
-# Check SSH keys
-ssh-copy-id deployer@192.168.1.10
+# Check artifact paths match
+ls -la dist/
+ls -la build/kubespray-offline/outputs/
 ```
 
-**Image pull fails on nodes**:
-```bash
-# Verify registry accessible from node
-ssh worker-01 "curl http://192.168.1.5:35000/v2/_catalog"
+### Backward Compatibility
 
-# Check containerd config
-ssh worker-01 "cat /etc/containerd/config.toml | grep registry"
-```
+The Python tool maintains compatibility:
+- Reads existing `config/versions.env` without modification
+- Outputs artifacts to same paths as bash scripts
+- Preserves `kubespray-offline` directory structure
+- Produces byte-identical Zarf packages
 
-## Testing
+Both systems can run in parallel during migration.
+
+## Development
+
+### Running from Source
 
 ```bash
-# Unit tests
-pytest tests/test_verify_sbom.py
+# Clone repository
+git clone https://github.com/rackerlabs/opencenter-airgap.git
+cd opencenter-airgap
 
-# Integration tests
-./tests/integration/test_kubespray_idempotency.sh
-./tests/integration/test_kubespray_offline_idempotency.sh
+# Install dependencies
+pip install -e .
+
+# Run tests
+pytest tests/
+
+# Run tool
+python -m opencenter_build.cli build
 ```
 
-## Contributing
+### Building Binary
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow and coding standards.
+```bash
+# Install PyInstaller
+pip install pyinstaller
+
+# Build binary
+pyinstaller opencenter-airgap.spec
+
+# Test binary
+./dist/opencenter-airgap version
+```
 
 ## License
 
-See [LICENSE](LICENSE) for details.
+Apache License 2.0
+
+## Support
+
+- Issues: https://github.com/rackerlabs/opencenter-airgap/issues
+- Documentation: https://github.com/rackerlabs/opencenter-airgap/docs
