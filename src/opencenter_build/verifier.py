@@ -116,10 +116,31 @@ class PackageVerifier:
         Returns:
             True if signature valid, False otherwise
         """
-        # Placeholder - actual implementation would use cosign
-        # For now, check if signature file exists
+        import shutil
+        import subprocess
+
+        # Check if cosign is available
+        if not shutil.which("cosign"):
+            return False
+
+        # Check if signature file exists
         sig_path = package_path.with_suffix(package_path.suffix + ".sig")
-        return sig_path.exists()
+        if not sig_path.exists():
+            return False
+
+        try:
+            # Verify signature using cosign
+            # cosign verify-blob --signature <sig> --key <key> <package>
+            # For keyless signing: cosign verify-blob --signature <sig> <package>
+            result = subprocess.run(
+                ["cosign", "verify-blob", "--signature", str(sig_path), str(package_path)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+            return False
 
     def _verify_checksums(self, package_path: Path) -> bool:
         """Verify internal checksums.
@@ -130,12 +151,42 @@ class PackageVerifier:
         Returns:
             True if checksums valid, False otherwise
         """
-        # Placeholder - actual implementation would extract and verify
-        # For now, just check package exists and is readable
+        import shutil
+        import subprocess
+
+        # Check if zarf is available
+        if not shutil.which("zarf"):
+            # Fallback: verify package file integrity with basic checks
+            try:
+                # Check file is readable and has reasonable size
+                stat = package_path.stat()
+                if stat.st_size < 1024:  # Package should be at least 1KB
+                    return False
+
+                # Verify it's a valid tar.zst file by checking magic bytes
+                with open(package_path, "rb") as f:
+                    magic = f.read(4)
+                    # Zstandard magic number: 0x28, 0xB5, 0x2F, 0xFD
+                    if len(magic) < 4 or magic[:4] != b"\x28\xB5\x2F\xFD":
+                        return False
+
+                return True
+            except Exception:
+                return False
+
         try:
-            package_path.stat()
-            return True
-        except Exception:
+            # Use zarf to inspect package (validates internal structure)
+            # Note: --insecure flag skips signature validation
+            result = subprocess.run(
+                ["zarf", "package", "inspect", str(package_path), "--insecure"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            # If zarf can inspect it, internal structure is valid
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError):
             return False
 
     def _compare_manifest(
@@ -152,22 +203,109 @@ class PackageVerifier:
         Returns:
             List of discrepancies (empty if match)
         """
+        import json
+        import shutil
+        import subprocess
+
         errors: list[str] = []
 
         if not manifest_path.exists():
             errors.append(f"Manifest not found: {manifest_path}")
             return errors
 
-        # Placeholder - actual implementation would extract package
-        # and compare against manifest
         try:
-            import json
-
             manifest_data = json.loads(manifest_path.read_text())
 
             # Basic validation
             if "total_artifacts" not in manifest_data:
                 errors.append("Manifest missing total_artifacts field")
+                return errors
+
+            # If zarf is available, extract package metadata
+            if shutil.which("zarf"):
+                try:
+                    result = subprocess.run(
+                        [
+                            "zarf",
+                            "package",
+                            "inspect",
+                            str(package_path),
+                            "--insecure",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                    )
+
+                    if result.returncode == 0:
+                        # Parse zarf inspect output to compare components
+                        package_info = result.stdout
+
+                        # Compare image counts
+                        if "images" in manifest_data:
+                            manifest_image_count = len(manifest_data["images"])
+                            # Count images in zarf output (rough heuristic)
+                            package_image_count = package_info.count("registry.k8s.io") + package_info.count(
+                                "docker.io"
+                            )
+
+                            if manifest_image_count > 0 and package_image_count == 0:
+                                errors.append(
+                                    f"Manifest lists {manifest_image_count} images but package inspection found none"
+                                )
+
+                        # Compare repository counts
+                        if "repositories" in manifest_data:
+                            manifest_repo_count = len(manifest_data["repositories"])
+                            package_repo_count = package_info.count("https://github.com")
+
+                            if manifest_repo_count > 0 and package_repo_count == 0:
+                                errors.append(
+                                    f"Manifest lists {manifest_repo_count} repos but package inspection found none"
+                                )
+
+                        # Verify package metadata matches manifest
+                        if "package_file" in manifest_data:
+                            expected_name = manifest_data["package_file"]
+                            actual_name = package_path.name
+                            if expected_name != actual_name:
+                                errors.append(
+                                    f"Package name mismatch: manifest expects '{expected_name}', got '{actual_name}'"
+                                )
+
+                        # Verify package size if available
+                        if "package_size" in manifest_data:
+                            expected_size = manifest_data["package_size"]
+                            actual_size = package_path.stat().st_size
+                            # Allow 1% variance for compression differences
+                            size_diff = abs(expected_size - actual_size) / expected_size
+                            if size_diff > 0.01:
+                                errors.append(
+                                    f"Package size mismatch: manifest expects {expected_size} bytes, got {actual_size} bytes ({size_diff*100:.1f}% difference)"
+                                )
+
+                        # Verify package checksum if available
+                        if "package_sha256" in manifest_data:
+                            import hashlib
+
+                            expected_sha = manifest_data["package_sha256"]
+                            sha256 = hashlib.sha256()
+
+                            with open(package_path, "rb") as f:
+                                for chunk in iter(lambda: f.read(8192), b""):
+                                    sha256.update(chunk)
+
+                            actual_sha = sha256.hexdigest()
+                            if expected_sha != actual_sha:
+                                errors.append(
+                                    f"Package checksum mismatch: manifest expects {expected_sha}, got {actual_sha}"
+                                )
+
+                except (subprocess.TimeoutExpired, subprocess.SubprocessError) as exc:
+                    errors.append(f"Failed to inspect package: {exc}")
+            else:
+                # Without zarf, only do basic manifest validation
+                errors.append("Zarf CLI not available - skipping detailed package comparison")
 
         except json.JSONDecodeError as exc:
             errors.append(f"Invalid manifest JSON: {exc}")

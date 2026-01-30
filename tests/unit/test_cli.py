@@ -13,7 +13,7 @@ import yaml
 from typer.testing import CliRunner
 
 from opencenter_build.cli import app
-from opencenter_build.component_manifest import ComponentManifest, ToolSpec, RepositorySpec
+from opencenter_build.component_manifest import ComponentManifest, ToolComponent, RepositoryComponent
 
 
 @pytest.fixture
@@ -62,17 +62,19 @@ def sample_versions_env(temp_config_dir):
 @pytest.fixture
 def sample_component_manifest(temp_config_dir):
     """Create sample component manifest."""
+    from opencenter_build.component_manifest import write_manifest
+
     manifest_file = temp_config_dir / "components.yaml"
     manifest = ComponentManifest()
     manifest.tools = [
-        ToolSpec(name="kubectl", version="v1.34.3", url="https://example.com/kubectl")
+        ToolComponent(name="kubectl", version="v1.34.3", url="https://example.com/kubectl")
     ]
     manifest.repositories = [
-        RepositorySpec(
+        RepositoryComponent(
             name="kubespray", url="https://github.com/example/kubespray.git", ref="master"
         )
     ]
-    manifest.save(manifest_file)
+    write_manifest(manifest, manifest_file)
     return manifest_file
 
 
