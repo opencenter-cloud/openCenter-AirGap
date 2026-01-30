@@ -1192,26 +1192,26 @@ opencenter-airgap verify --manifest dist/artifact-manifest.json \
                              │
                              │ Transfer via secure media
                              ▼
-┌─────────────────────────────────────────────────────────────────┐
+┌────────────────────────────────────────────────────────────────┐
 │ ZONE C (Disconnected Deployment Environment)                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
 │  7. Field Operator Verifies Package                            │
 │     $ opencenter-airgap verify zarf-package-*.tar.zst          │
 │     → Checks Cosign signature                                  │
 │     → Validates checksums                                      │
 │     → Reads artifact-manifest.json                             │
 │     → Confirms 2,989 artifacts present                         │
-│                      │                                          │
-│                      ▼                                          │
+│                      │                                         │
+│                      ▼                                         │
 │  8. Zarf Deploys Package                                       │
 │     $ opencenter-airgap serve zarf-package-*.tar.zst           │
 │     → Extracts to /opt/opencenter/                             │
 │     → Starts registry (serves 115 images)                      │
 │     → Starts git server (serves 4 repos)                       │
 │     → Starts nginx (serves binaries, OS packages, PyPI)        │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---

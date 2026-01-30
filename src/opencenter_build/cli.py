@@ -263,7 +263,8 @@ def scan(
                 console.print("Run 'opencenter-airgap init --create-manifest' first")
                 raise typer.Exit(code=1)
 
-            manifest = ComponentManifest.from_yaml(manifest_path)
+            from opencenter_build.component_manifest import read_manifest
+            manifest = read_manifest(manifest_path)
 
             # Check if repositories are cloned
             for repo_spec in manifest.repositories:
@@ -388,7 +389,8 @@ def generate_manifest(
             raise typer.Exit(code=1)
 
         console.print(f"[cyan]Loading component manifest...[/cyan]")
-        manifest = ComponentManifest.from_yaml(component_manifest)
+        from opencenter_build.component_manifest import read_manifest
+        manifest = read_manifest(component_manifest)
         console.print(
             f"[green]✓[/green] Loaded {len(manifest.tools)} tools, {len(manifest.repositories)} repos"
         )
@@ -554,35 +556,142 @@ def build(
             # Check if kubespray-offline exists
             kubespray_dir = Path("build/kubespray-offline")
             if not kubespray_dir.exists():
-                console.print(f"  [yellow]⚠[/yellow] kubespray-offline not found, skipping")
-                return {"assets": str(kubespray_dir / "outputs"), "status": "skipped"}
+                console.print(f"  [yellow]⚠[/yellow] kubespray-offline not found at {kubespray_dir}")
+                console.print(f"  [cyan]Clone: git clone https://github.com/kubespray-offline/kubespray-offline.git build/kubespray-offline[/cyan]")
+                return {"assets": "", "status": "skipped", "reason": "kubespray_offline_not_found"}
 
-            # In real implementation, would run download-all.sh
-            # For now, just verify directory structure
+            # Check if download-all.sh exists
+            download_script = kubespray_dir / "download-all.sh"
+            if not download_script.exists():
+                console.print(f"  [yellow]⚠[/yellow] download-all.sh not found in {kubespray_dir}")
+                return {"assets": "", "status": "skipped", "reason": "download_script_not_found"}
+
+            # Check if outputs already exist
             outputs_dir = kubespray_dir / "outputs"
             if outputs_dir.exists():
-                console.print(f"  [green]✓[/green] Assets directory exists")
-                return {"assets": str(outputs_dir), "status": "verified"}
-            else:
-                console.print(f"  [yellow]⚠[/yellow] No outputs directory found")
-                return {"assets": str(outputs_dir), "status": "missing"}
+                # Count artifacts
+                file_count = sum(1 for _ in outputs_dir.rglob("*") if _.is_file())
+                if file_count > 0:
+                    console.print(f"  [green]✓[/green] Found {file_count} existing artifacts in {outputs_dir}")
+                    return {"assets": str(outputs_dir), "status": "verified", "count": str(file_count)}
+
+            # Run download-all.sh if outputs don't exist
+            console.print(f"  [cyan]Running kubespray-offline download-all.sh...[/cyan]")
+            console.print(f"  [yellow]⚠[/yellow] This may take 30-60 minutes depending on network speed")
+
+            try:
+                import subprocess
+
+                result = subprocess.run(
+                    ["bash", str(download_script)],
+                    cwd=str(kubespray_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=7200,  # 2 hour timeout
+                )
+
+                if result.returncode != 0:
+                    console.print(f"  [red]✗[/red] kubespray-offline download failed")
+                    console.print(f"  [red]{result.stderr}[/red]")
+                    return {"assets": "", "status": "failed", "error": result.stderr}
+
+                # Verify outputs were created
+                if outputs_dir.exists():
+                    file_count = sum(1 for _ in outputs_dir.rglob("*") if _.is_file())
+                    console.print(f"  [green]✓[/green] Downloaded {file_count} artifacts")
+                    return {"assets": str(outputs_dir), "status": "downloaded", "count": str(file_count)}
+                else:
+                    console.print(f"  [yellow]⚠[/yellow] Download completed but outputs directory not found")
+                    return {"assets": "", "status": "unknown"}
+
+            except subprocess.TimeoutExpired:
+                console.print(f"  [red]✗[/red] kubespray-offline download timed out after 2 hours")
+                return {"assets": "", "status": "timeout"}
+            except Exception as exc:
+                console.print(f"  [red]✗[/red] kubespray-offline download error: {exc}")
+                return {"assets": "", "status": "error", "error": str(exc)}
 
         def mirror_terraform_providers() -> dict[str, str]:
             """Mirror Terraform providers."""
             console.print("  [cyan]Mirroring Terraform providers...[/cyan]")
 
-            # Check if Terraform is needed
+            # Check if Terraform modules exist
             terraform_dir = Path("assets/terraform")
             if not terraform_dir.exists():
-                console.print(f"  [yellow]⚠[/yellow] No Terraform modules found, skipping")
-                return {"providers": "assets/terraform-mirror", "status": "skipped"}
+                console.print(f"  [yellow]⚠[/yellow] No Terraform modules found at {terraform_dir}")
+                console.print(f"  [cyan]Skipping provider mirroring (OpenStack deployments only)[/cyan]")
+                return {"providers": "", "status": "skipped", "reason": "no_terraform_modules"}
 
-            # In real implementation, would run terraform providers mirror
+            # Check if terraform CLI is available
+            import shutil
+
+            if not shutil.which("terraform"):
+                console.print(f"  [yellow]⚠[/yellow] Terraform CLI not available")
+                console.print(f"  [cyan]Install terraform: https://www.terraform.io/downloads[/cyan]")
+                return {"providers": "", "status": "skipped", "reason": "terraform_cli_not_found"}
+
+            # Create mirror directory
             mirror_dir = Path("assets/terraform-mirror")
             mirror_dir.mkdir(parents=True, exist_ok=True)
 
-            console.print(f"  [green]✓[/green] Provider mirror directory ready")
-            return {"providers": str(mirror_dir), "status": "ready"}
+            # Run terraform providers mirror
+            console.print(f"  [cyan]Running terraform providers mirror...[/cyan]")
+
+            try:
+                import subprocess
+
+                result = subprocess.run(
+                    [
+                        "terraform",
+                        "providers",
+                        "mirror",
+                        "-platform=linux_amd64",
+                        str(mirror_dir),
+                    ],
+                    cwd=str(terraform_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=600,  # 10 minute timeout
+                )
+
+                if result.returncode != 0:
+                    console.print(f"  [red]✗[/red] Terraform provider mirror failed")
+                    console.print(f"  [red]{result.stderr}[/red]")
+                    return {"providers": "", "status": "failed", "error": result.stderr}
+
+                # Count mirrored providers
+                provider_count = sum(1 for _ in mirror_dir.rglob("*.zip") if _.is_file())
+                console.print(f"  [green]✓[/green] Mirrored {provider_count} providers to {mirror_dir}")
+
+                # Generate .terraformrc for offline use
+                terraformrc = Path("assets/terraform-config/.terraformrc")
+                terraformrc.parent.mkdir(parents=True, exist_ok=True)
+                terraformrc.write_text(
+                    f'provider_installation {{\n'
+                    f'  filesystem_mirror {{\n'
+                    f'    path    = "{mirror_dir.absolute()}"\n'
+                    f'    include = ["*/*"]\n'
+                    f'  }}\n'
+                    f'  direct {{\n'
+                    f'    exclude = ["*/*"]\n'
+                    f'  }}\n'
+                    f'}}\n'
+                )
+                console.print(f"  [green]✓[/green] Generated .terraformrc for offline use")
+
+                return {
+                    "providers": str(mirror_dir),
+                    "status": "mirrored",
+                    "count": str(provider_count),
+                    "config": str(terraformrc),
+                }
+
+            except subprocess.TimeoutExpired:
+                console.print(f"  [red]✗[/red] Terraform provider mirror timed out")
+                return {"providers": "", "status": "timeout"}
+            except Exception as exc:
+                console.print(f"  [red]✗[/red] Terraform provider mirror error: {exc}")
+                return {"providers": "", "status": "error", "error": str(exc)}
 
         def organize_assets() -> dict[str, str]:
             """Organize assets for packaging."""
@@ -609,15 +718,49 @@ def build(
                 generator.generate(zarf_file)
                 console.print(f"  [green]✓[/green] Generated zarf.yaml")
 
-            # In real implementation, would run: zarf package create --confirm
+            # Check if zarf CLI is available
+            import shutil
+
+            if not shutil.which("zarf"):
+                console.print(f"  [yellow]⚠[/yellow] Zarf CLI not available - skipping package creation")
+                console.print(f"  [cyan]Install zarf: https://docs.zarf.dev/getting-started/install/[/cyan]")
+                return {"package": "", "status": "skipped", "reason": "zarf_cli_not_found"}
+
+            # Create package with zarf CLI
             dist_dir = Path("dist")
             dist_dir.mkdir(parents=True, exist_ok=True)
 
-            package_path = dist_dir / "zarf-package-opencenter-airgap.tar.zst"
-            console.print(f"  [yellow]⚠[/yellow] Zarf package creation requires 'zarf' CLI")
-            console.print(f"  [cyan]Would create: {package_path}[/cyan]")
+            try:
+                import subprocess
 
-            return {"package": str(package_path), "status": "simulated"}
+                result = subprocess.run(
+                    ["zarf", "package", "create", "--confirm", "-o", str(dist_dir)],
+                    capture_output=True,
+                    text=True,
+                    timeout=3600,  # 1 hour timeout for large packages
+                )
+
+                if result.returncode != 0:
+                    console.print(f"  [red]✗[/red] Zarf package creation failed")
+                    console.print(f"  [red]{result.stderr}[/red]")
+                    return {"package": "", "status": "failed", "error": result.stderr}
+
+                # Find created package
+                packages = list(dist_dir.glob("zarf-package-*.tar.zst"))
+                if packages:
+                    package_path = packages[0]
+                    console.print(f"  [green]✓[/green] Created package: {package_path}")
+                    return {"package": str(package_path), "status": "created"}
+                else:
+                    console.print(f"  [yellow]⚠[/yellow] Package created but not found in {dist_dir}")
+                    return {"package": "", "status": "unknown"}
+
+            except subprocess.TimeoutExpired:
+                console.print(f"  [red]✗[/red] Zarf package creation timed out")
+                return {"package": "", "status": "timeout"}
+            except Exception as exc:
+                console.print(f"  [red]✗[/red] Zarf package creation error: {exc}")
+                return {"package": "", "status": "error", "error": str(exc)}
 
         def generate_manifest() -> dict[str, str]:
             """Generate artifact manifest."""
@@ -1486,6 +1629,222 @@ def version() -> None:
             table.add_row(dep_name, "[red]not installed[/red]")
 
     console.print(table)
+
+
+@app.command()
+def release(
+    version: Optional[str] = typer.Argument(None, help="Version to release (e.g., 1.0.0 or v1.0.0)"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done without creating tag"),
+    force: bool = typer.Option(False, "--force", help="Skip confirmation prompt"),
+) -> None:
+    """Create a release tag and push to trigger CI/CD.
+
+    Creates an annotated git tag and pushes to origin, triggering the GitHub
+    Actions release workflow to build and publish artifacts.
+
+    Examples:
+        Release current version from pyproject.toml:
+            opencenter-airgap release
+
+        Release specific version:
+            opencenter-airgap release 1.0.1
+
+        Dry run to preview:
+            opencenter-airgap release 1.0.1 --dry-run
+    """
+    import re
+    from datetime import datetime
+
+    try:
+        # Get version
+        if not version:
+            # Read from pyproject.toml
+            pyproject_path = Path("pyproject.toml")
+            if not pyproject_path.exists():
+                console.print("[red]Error:[/red] pyproject.toml not found")
+                raise typer.Exit(code=1)
+
+            import tomli
+            with open(pyproject_path, "rb") as f:
+                pyproject = tomli.load(f)
+
+            version = pyproject.get("project", {}).get("version")
+            if not version:
+                console.print("[red]Error:[/red] No version found in pyproject.toml")
+                raise typer.Exit(code=1)
+
+            console.print(f"[cyan]Using version from pyproject.toml:[/cyan] {version}")
+
+        # Normalize version (add 'v' prefix if missing)
+        if not version.startswith("v"):
+            version = f"v{version}"
+
+        # Validate version format
+        if not re.match(r"^v?\d+\.\d+\.\d+$", version):
+            console.print(f"[red]Error:[/red] Invalid version format: {version}")
+            console.print("Expected format: X.Y.Z or vX.Y.Z")
+            raise typer.Exit(code=1)
+
+        # Check git status
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if result.stdout.strip():
+            console.print("[red]Error:[/red] Working directory is not clean")
+            console.print("\nUncommitted changes:")
+            console.print(result.stdout)
+            console.print("\nCommit or stash changes first")
+            raise typer.Exit(code=1)
+
+        # Check remote
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            console.print("[red]Error:[/red] No git remote 'origin' configured")
+            raise typer.Exit(code=1)
+
+        remote_url = result.stdout.strip()
+
+        # Check if tag exists
+        result = subprocess.run(
+            ["git", "tag", "-l", version],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        if result.stdout.strip():
+            console.print(f"[red]Error:[/red] Tag {version} already exists")
+
+            # Show recent tags
+            result = subprocess.run(
+                ["git", "tag", "-l", "v*", "--sort=-version:refname"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            recent_tags = result.stdout.strip().split("\n")[:5]
+            console.print("\nRecent tags:")
+            for tag in recent_tags:
+                console.print(f"  {tag}")
+
+            raise typer.Exit(code=1)
+
+        # Get current branch and commit
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        current_branch = result.stdout.strip()
+
+        result = subprocess.run(
+            ["git", "log", "-1", "--oneline"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        latest_commit = result.stdout.strip()
+
+        # Display release info
+        console.print()
+        console.print(Panel.fit(
+            f"[bold]Release Information[/bold]\n\n"
+            f"Version: [cyan]{version}[/cyan]\n"
+            f"Branch: [cyan]{current_branch}[/cyan]\n"
+            f"Commit: [cyan]{latest_commit}[/cyan]\n"
+            f"Remote: [cyan]{remote_url}[/cyan]\n"
+            f"Time: [cyan]{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/cyan]",
+            title="Release",
+            border_style="cyan",
+        ))
+
+        if dry_run:
+            console.print("\n[yellow]Dry run - no changes made[/yellow]")
+            console.print("\nWould execute:")
+            console.print(f"  git tag -a {version} -m 'Release {version}'")
+            console.print(f"  git push origin {version}")
+            return
+
+        # Confirm release
+        if not force:
+            console.print()
+            confirm = typer.confirm("Create and push release tag?")
+            if not confirm:
+                console.print("[yellow]Release cancelled[/yellow]")
+                return
+
+        # Create tag
+        console.print(f"\n[cyan]Creating tag:[/cyan] {version}")
+        result = subprocess.run(
+            ["git", "tag", "-a", version, "-m", f"Release {version}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            console.print(f"[red]Error:[/red] Failed to create tag")
+            console.print(result.stderr)
+            raise typer.Exit(code=1)
+
+        console.print("[green]✓[/green] Tag created")
+
+        # Push tag
+        console.print(f"[cyan]Pushing tag to origin...[/cyan]")
+        result = subprocess.run(
+            ["git", "push", "origin", version],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            console.print(f"[red]Error:[/red] Failed to push tag")
+            console.print(result.stderr)
+            console.print(f"\n[yellow]Tag created locally but not pushed[/yellow]")
+            console.print(f"To push manually: git push origin {version}")
+            console.print(f"To delete tag: git tag -d {version}")
+            raise typer.Exit(code=1)
+
+        console.print("[green]✓[/green] Tag pushed")
+
+        # Extract GitHub repo from remote URL
+        github_match = re.search(r"github\.com[:/](.+?)(?:\.git)?$", remote_url)
+        if github_match:
+            repo_path = github_match.group(1)
+            actions_url = f"https://github.com/{repo_path}/actions"
+
+            console.print()
+            console.print(Panel.fit(
+                f"[bold green]Release tag created successfully![/bold green]\n\n"
+                f"GitHub Actions will build and publish the release.\n\n"
+                f"Monitor progress:\n"
+                f"[cyan]{actions_url}[/cyan]",
+                title="Success",
+                border_style="green",
+            ))
+        else:
+            console.print()
+            console.print("[bold green]Release tag created successfully![/bold green]")
+            console.print("CI/CD pipeline will build and publish the release")
+
+    except subprocess.CalledProcessError as exc:
+        console.print(f"[red]Error:[/red] Git command failed: {exc}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=1)
 
 
 def main() -> None:

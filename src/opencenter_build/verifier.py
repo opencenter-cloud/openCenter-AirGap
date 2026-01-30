@@ -110,12 +110,18 @@ class PackageVerifier:
     def _verify_signature(self, package_path: Path) -> bool:
         """Verify Cosign signature.
 
+        Attempts signature verification with multiple strategies:
+        1. Public key from environment (COSIGN_PUBLIC_KEY)
+        2. Public key from standard locations
+        3. Keyless verification (OIDC-based)
+
         Args:
             package_path: Path to package
 
         Returns:
-            True if signature valid, False otherwise
+            True if signature valid, False if cosign unavailable or verification fails
         """
+        import os
         import shutil
         import subprocess
 
@@ -128,19 +134,83 @@ class PackageVerifier:
         if not sig_path.exists():
             return False
 
+        # Strategy 1: Try public key from environment
+        public_key_env = os.environ.get("COSIGN_PUBLIC_KEY")
+        if public_key_env:
+            try:
+                result = subprocess.run(
+                    [
+                        "cosign",
+                        "verify-blob",
+                        "--signature",
+                        str(sig_path),
+                        "--key",
+                        "env://COSIGN_PUBLIC_KEY",
+                        str(package_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if result.returncode == 0:
+                    return True
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+                pass
+
+        # Strategy 2: Try public key from standard locations
+        key_locations = [
+            Path("cosign.pub"),
+            Path("/etc/opencenter/cosign.pub"),
+            Path.home() / ".cosign" / "cosign.pub",
+            package_path.parent / "cosign.pub",
+        ]
+
+        for key_path in key_locations:
+            if key_path.exists():
+                try:
+                    result = subprocess.run(
+                        [
+                            "cosign",
+                            "verify-blob",
+                            "--signature",
+                            str(sig_path),
+                            "--key",
+                            str(key_path),
+                            str(package_path),
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if result.returncode == 0:
+                        return True
+                except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+                    continue
+
+        # Strategy 3: Try keyless verification (requires OIDC identity)
         try:
-            # Verify signature using cosign
-            # cosign verify-blob --signature <sig> --key <key> <package>
-            # For keyless signing: cosign verify-blob --signature <sig> <package>
             result = subprocess.run(
-                ["cosign", "verify-blob", "--signature", str(sig_path), str(package_path)],
+                [
+                    "cosign",
+                    "verify-blob",
+                    "--signature",
+                    str(sig_path),
+                    "--certificate-identity-regexp",
+                    ".*",
+                    "--certificate-oidc-issuer-regexp",
+                    ".*",
+                    str(package_path),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
-            return result.returncode == 0
+            if result.returncode == 0:
+                return True
         except (subprocess.TimeoutExpired, subprocess.SubprocessError):
-            return False
+            pass
+
+        return False
 
     def _verify_checksums(self, package_path: Path) -> bool:
         """Verify internal checksums.

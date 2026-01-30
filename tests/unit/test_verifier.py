@@ -85,10 +85,36 @@ class TestPackageVerifier:
         mock_result.returncode = 0
 
         with patch("shutil.which", return_value="/usr/bin/cosign"):
-            with patch("subprocess.run", return_value=mock_result):
+            with patch("subprocess.run", return_value=mock_result) as mock_run:
                 result = verifier._verify_signature(package)
 
         assert result is True
+        # Should try multiple verification strategies
+        assert mock_run.call_count >= 1
+
+    def test_verify_signature_with_env_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test signature verification with public key from environment."""
+        verifier = PackageVerifier()
+        package = tmp_path / "test.tar.zst"
+        sig_file = tmp_path / "test.tar.zst.sig"
+
+        package.write_bytes(b"\x28\xB5\x2F\xFD" + b"data" * 300)
+        sig_file.write_text("fake signature")
+
+        # Set environment variable
+        monkeypatch.setenv("COSIGN_PUBLIC_KEY", "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----")
+
+        mock_result = Mock()
+        mock_result.returncode = 0
+
+        with patch("shutil.which", return_value="/usr/bin/cosign"):
+            with patch("subprocess.run", return_value=mock_result) as mock_run:
+                result = verifier._verify_signature(package)
+
+        assert result is True
+        # Should use env://COSIGN_PUBLIC_KEY
+        call_args = mock_run.call_args[0][0]
+        assert "env://COSIGN_PUBLIC_KEY" in call_args
 
     def test_verify_signature_without_cosign(self, tmp_path: Path) -> None:
         """Test signature verification without cosign."""

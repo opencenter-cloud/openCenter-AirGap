@@ -309,7 +309,51 @@ class BuildOrchestrator:
         Args:
             step_name: Name of step to rollback
         """
-        # Best-effort cleanup
-        # In a real implementation, this would remove partial artifacts
-        # For now, we just log the rollback attempt
-        pass
+        import logging
+        import shutil
+
+        logger = logging.getLogger(__name__)
+
+        # Define rollback actions per step
+        rollback_actions = {
+            "scan_repositories": lambda: self._cleanup_file(Path("config/all-images.txt")),
+            "collect_kubespray_offline": lambda: self._cleanup_directory(
+                Path("build/kubespray-offline/outputs")
+            ),
+            "mirror_terraform_providers": lambda: self._cleanup_directory(
+                Path("assets/terraform-mirror")
+            ),
+            "organize_assets": lambda: self._cleanup_directory(Path("assets")),
+            "create_zarf_package": lambda: self._cleanup_file(
+                Path("dist/zarf-package-opencenter-airgap.tar.zst")
+            ),
+            "generate_manifest": lambda: self._cleanup_file(Path("dist/artifact-manifest.json")),
+        }
+
+        # Execute rollback if defined
+        if step_name in rollback_actions:
+            try:
+                rollback_actions[step_name]()
+                logger.info(f"Rolled back artifacts for step: {step_name}")
+            except Exception as exc:
+                logger.warning(f"Rollback failed for step {step_name}: {exc}")
+
+    def _cleanup_file(self, file_path: Path) -> None:
+        """Remove file if it exists.
+
+        Args:
+            file_path: Path to file to remove
+        """
+        if file_path.exists() and file_path.is_file():
+            file_path.unlink()
+
+    def _cleanup_directory(self, dir_path: Path) -> None:
+        """Remove directory and contents if it exists.
+
+        Args:
+            dir_path: Path to directory to remove
+        """
+        import shutil
+
+        if dir_path.exists() and dir_path.is_dir():
+            shutil.rmtree(dir_path)

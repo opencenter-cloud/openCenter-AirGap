@@ -366,9 +366,9 @@ class ComprehensiveConfigValidator:
             return ValidationResult(errors=errors, warnings=warnings)
 
         try:
-            from opencenter_build.component_manifest import ComponentManifest
+            from opencenter_build.component_manifest import read_manifest
 
-            manifest = ComponentManifest.from_yaml(component_manifest_path)
+            manifest = read_manifest(component_manifest_path)
 
             # Check each repository
             for repo_spec in manifest.repositories:
@@ -457,9 +457,9 @@ class ComprehensiveConfigValidator:
             return ValidationResult(errors=errors, warnings=warnings)
 
         try:
-            from opencenter_build.component_manifest import ComponentManifest
+            from opencenter_build.component_manifest import read_manifest
 
-            manifest = ComponentManifest.from_yaml(component_manifest_path)
+            manifest = read_manifest(component_manifest_path)
 
             # Basic sanity checks
             if not manifest.repositories and not manifest.tools:
