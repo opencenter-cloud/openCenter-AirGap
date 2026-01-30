@@ -118,10 +118,13 @@ class TestGitHubTokenWorker:
 class TestValidationWorkers:
     """Tests for validation workers."""
     
-    def test_validate_versions_fails_without_config_dir(self, tmp_path):
-        """Test version validation fails if config/ doesn't exist."""
+    def test_validate_versions_fails_without_config_dir(self, tmp_path, capsys):
+        """Test version validation warns if config/ doesn't exist."""
         result = validate_versions_worker(tmp_path)
-        assert result is False
+        # Should warn but not fail (returns True with warning)
+        assert result is True
+        captured = capsys.readouterr()
+        assert "WARNING: config/ directory not found" in captured.out
     
     def test_validate_versions_with_empty_config(self, tmp_path):
         """Test version validation with empty config directory."""

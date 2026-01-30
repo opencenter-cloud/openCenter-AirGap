@@ -53,11 +53,13 @@ class TestVersionsEnvValidation:
             "KUBERNETES_VERSION": "v1.34.3",
             "TERRAFORM_VERSION": "1.6.6",
             "KUBESPRAY_VERSION": "v2.24.0",
+            "KUBESPRAY_COMMIT_SHA": "abc123def456789012345678901234567890abcd",
             "UBUNTU_VERSION": "24.04",
             "CONTAINER_RUNTIME": "containerd",
             "CNI_PLUGIN": "calico",
             "FLUXCD_VERSION": "v2.2.0",
             "GITEA_VERSION": "1.21.0",
+            "OPENCENTER_GITOPS_BASE_COMMIT_SHA": "def456abc123789012345678901234567890abcd",
         }
         # Should not raise
         validator.validate_versions_env(config)
@@ -134,6 +136,7 @@ class TestVersionsEnvValidation:
             "CONTAINER_RUNTIME": "containerd",
             "CNI_PLUGIN": "calico",
             "KUBESPRAY_COMMIT_SHA": "abc123def456789012345678901234567890abcd",
+            "OPENCENTER_GITOPS_BASE_COMMIT_SHA": "def456abc123789012345678901234567890abcd",
         }
         validator.validate_versions_env(config)
 

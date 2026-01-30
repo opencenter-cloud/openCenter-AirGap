@@ -159,7 +159,7 @@ class TestBuildMetrics:
         assert (
             'opencenter_build_package_size_bytes{build_id="build-20260127"} 1000000000' in prom_str
         )
-        assert 'opencenter_build_image_count{build_id="build-20260127"} 50' in prom_str
+        assert 'opencenter_build_artifact_count{build_id="build-20260127",type="images"} 50' in prom_str
         assert (
             f'opencenter_build_duration_seconds{{build_id="build-20260127"}} {metrics.duration_seconds}'
             in prom_str

@@ -153,9 +153,9 @@ class BuildMetrics:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # JSON format
-        json_file = output_dir / "build-metrics.json"
+        json_file = output_dir / "metrics.json"
         json_file.write_text(self.to_json())
 
         # Prometheus format
-        prom_file = output_dir / "build-metrics.prom"
+        prom_file = output_dir / "metrics.prom"
         prom_file.write_text(self.to_prometheus())
