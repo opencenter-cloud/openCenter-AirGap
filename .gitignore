@@ -69,3 +69,4 @@ temp/
 zarf-sbom/
 zarf-package-*.tar.zst
 checksums.txt
+testdata/

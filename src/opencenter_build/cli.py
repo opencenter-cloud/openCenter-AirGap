@@ -1663,6 +1663,144 @@ def version() -> None:
 
 
 @app.command()
+def keygen(
+    output_dir: Path = typer.Option(
+        Path(".secrets"), "--output", "-o", help="Output directory for keys"
+    ),
+    key_name: str = typer.Option(
+        "signing-key", "--name", "-n", help="Key name (without extension)"
+    ),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Overwrite existing keys"
+    ),
+) -> None:
+    """Generate Cosign signing key pair for package signing.
+
+    Creates a Cosign-compatible key pair for signing Zarf packages.
+    Keys are stored in the specified directory with password protection.
+
+    Examples:
+        Generate default keys:
+            opencenter-airgap keygen
+
+        Custom location and name:
+            opencenter-airgap keygen --output ~/.keys --name prod-signing-key
+
+        Overwrite existing:
+            opencenter-airgap keygen --force
+    """
+    import getpass
+    import shutil
+
+    try:
+        # Check if cosign is available
+        if not shutil.which("cosign"):
+            console.print("[red]Error:[/red] Cosign CLI not found")
+            console.print("\nInstall cosign:")
+            console.print("  macOS: brew install cosign")
+            console.print("  Linux: https://docs.sigstore.dev/cosign/installation/")
+            raise typer.Exit(code=1)
+
+        # Create output directory
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Define key paths
+        private_key = output_dir / f"{key_name}.key"
+        public_key = output_dir / f"{key_name}.pub"
+
+        # Check if keys exist
+        if (private_key.exists() or public_key.exists()) and not force:
+            console.print(f"[red]Error:[/red] Keys already exist in {output_dir}")
+            console.print(f"  Private: {private_key}")
+            console.print(f"  Public: {public_key}")
+            console.print("\nUse --force to overwrite")
+            raise typer.Exit(code=1)
+
+        # Get password
+        console.print("[cyan]Enter password for private key (min 8 characters):[/cyan]")
+        password = getpass.getpass("Password: ")
+        if len(password) < 8:
+            console.print("[red]Error:[/red] Password must be at least 8 characters")
+            raise typer.Exit(code=1)
+
+        password_confirm = getpass.getpass("Confirm password: ")
+        if password != password_confirm:
+            console.print("[red]Error:[/red] Passwords do not match")
+            raise typer.Exit(code=1)
+
+        # Generate key pair
+        console.print(f"\n[cyan]Generating key pair...[/cyan]")
+
+        result = subprocess.run(
+            ["cosign", "generate-key-pair"],
+            cwd=str(output_dir),
+            input=f"{password}\n{password}\n",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            console.print(f"[red]Error:[/red] Key generation failed")
+            console.print(result.stderr)
+            raise typer.Exit(code=1)
+
+        # Rename keys if custom name
+        if key_name != "cosign":
+            default_private = output_dir / "cosign.key"
+            default_public = output_dir / "cosign.pub"
+
+            if default_private.exists():
+                default_private.rename(private_key)
+            if default_public.exists():
+                default_public.rename(public_key)
+
+        # Verify keys exist
+        if not private_key.exists() or not public_key.exists():
+            console.print("[red]Error:[/red] Key generation failed - files not created")
+            raise typer.Exit(code=1)
+
+        # Set restrictive permissions on private key
+        private_key.chmod(0o600)
+
+        # Display success
+        console.print()
+        console.print(
+            Panel.fit(
+                "[bold green]Key pair generated successfully![/bold green]\n\n"
+                f"Private key: [cyan]{private_key}[/cyan]\n"
+                f"Public key: [cyan]{public_key}[/cyan]\n\n"
+                "[yellow]⚠ Keep private key secure![/yellow]\n"
+                "- Never commit to version control\n"
+                "- Store in secure location (e.g., password manager)\n"
+                "- Backup securely\n\n"
+                "To sign packages:\n"
+                f"  export COSIGN_PASSWORD='your-password'\n"
+                f"  cosign sign-blob --key {private_key} <package>",
+                title="Success",
+                border_style="green",
+            )
+        )
+
+        # Add to .gitignore if in git repo
+        gitignore = Path(".gitignore")
+        if gitignore.exists():
+            gitignore_content = gitignore.read_text()
+            if str(output_dir) not in gitignore_content:
+                console.print(f"\n[cyan]Adding {output_dir} to .gitignore...[/cyan]")
+                with open(gitignore, "a") as f:
+                    f.write(f"\n# Signing keys\n{output_dir}/\n")
+                console.print("[green]✓[/green] Updated .gitignore")
+
+    except subprocess.CalledProcessError as exc:
+        console.print(f"[red]Error:[/red] Command failed: {exc}")
+        raise typer.Exit(code=1)
+    except Exception as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def release(
     version: Optional[str] = typer.Argument(
         None, help="Version to release (e.g., 1.0.0 or v1.0.0)"
