@@ -1,6 +1,6 @@
 {
   "name": "openCenter AirGap Git Repositories",
-  "version": "1.0.0",
+  "version": "1.0.0-rc1",
   "description": "Git repositories required for building openCenter AirGap package",
   "last_updated": "2026-01-26",
   "repositories": [

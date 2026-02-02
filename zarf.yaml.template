@@ -2,7 +2,7 @@ kind: ZarfPackageConfig
 metadata:
   name: opencenter-airgap
   description: Air-gapped Kubernetes cluster deployment with Kubespray
-  version: 1.0.0
+  version: 1.0.0-rc1
   architecture: amd64
   authors: openCenter Team
   url: https://github.com/opencenter/opencenter-airgap

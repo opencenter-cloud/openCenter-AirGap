@@ -1,6 +1,6 @@
 # Security Policy
 
-**doc_type**: reference  
+**doc_type**: reference
 **audience**: Security researchers, operators, platform engineers
 
 ## Reporting Security Vulnerabilities
@@ -9,7 +9,7 @@ Report security issues to the openCenter AirGap security team. Do not open publi
 
 ### Contact
 
-**Email**: security@opencenter.example.com  
+**Email**: security@opencenter.example.com
 **PGP Key**: Available at https://opencenter.example.com/security/pgp-key.asc
 
 For urgent issues requiring immediate attention, include `[URGENT]` in the subject line.
@@ -162,5 +162,5 @@ For security-related questions that are not vulnerability reports, email securit
 
 ---
 
-**Last Updated**: 2026-01-27  
-**Version**: 1.0.0
+**Last Updated**: 2026-02-01
+**Version**: 1.0.0-rc1

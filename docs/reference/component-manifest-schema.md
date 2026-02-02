@@ -1,318 +1,318 @@
-# Component Manifest Schema
-
 **doc_type: reference**
 
-Complete schema reference for `config/components.yaml`.
+# Component Manifest Schema
+
+JSON schema for `components.yaml` that defines what gets packaged.
+
+## Schema Version
+
+Current: `v1`
 
 ## Root Structure
 
 ```yaml
-kubernetes: KubernetesSpec
-tools: list[ToolSpec]
-repositories: list[RepositorySpec]
-images: ImageSpec
-charts: list[ChartSpec]
-os_packages: OSPackageSpec
-python_packages: PythonPackageSpec
-terraform_providers: list[TerraformProviderSpec]
+apiVersion: v1
+metadata:
+  name: string
+  version: string
+  description: string
+components:
+  - name: string
+    type: image|chart|binary|file|repository
+    enabled: boolean
+    # type-specific fields
 ```
 
-## KubernetesSpec
+## Metadata Fields
+
+`apiVersion` (required)
+Schema version. Must be `v1`.
+
+`metadata.name` (required)
+Package name. Used in artifact filename.
+
+`metadata.version` (required)
+Package version. Semantic versioning (e.g., `1.2.3`).
+
+`metadata.description` (optional)
+Human-readable description.
+
+## Component Fields
+
+`name` (required)
+Component identifier. Must be unique within manifest.
+
+`type` (required)
+Component type. One of: `image`, `chart`, `binary`, `file`, `repository`.
+
+`enabled` (optional)
+Include in build. Default: `true`.
+
+## Component Types
+
+### image
+
+Container image to include in registry.
 
 ```yaml
-kubernetes:
-  version: string  # Kubernetes version (e.g., "1.34.3")
-  binaries: list[BinarySpec]
+- name: nginx
+  type: image
+  image: docker.io/library/nginx:1.25.0
+  digest: sha256:4c0fdaa8b6341bfdeca5f18f7837462c80cff90527ee35ef185571e1c327beac
+  platform: linux/amd64
 ```
 
-### BinarySpec
+**Fields**:
+
+`image` (required)
+Full image reference with tag.
+
+`digest` (optional)
+SHA256 digest. If provided, image is pulled by digest instead of tag.
+
+`platform` (optional)
+Target platform. Default: `linux/amd64`.
+
+### chart
+
+Helm chart to include.
 
 ```yaml
-- name: string      # Binary name (e.g., "kubectl")
-  url: string       # Download URL (supports {{version}} template)
+- name: ingress-nginx
+  type: chart
+  repository: https://kubernetes.github.io/ingress-nginx
+  chart: ingress-nginx
+  version: 4.7.0
+  values:
+    controller:
+      service:
+        type: NodePort
 ```
 
-**Example**:
-```yaml
-kubernetes:
-  version: "1.34.3"
-  binaries:
-    - name: kubectl
-      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubectl"
-    - name: kubelet
-      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubelet"
-```
+**Fields**:
 
-## ToolSpec
+`repository` (required)
+Helm repository URL.
 
-```yaml
-- name: string           # Tool name
-  version: string        # Tool version
-  url: string            # Download URL (supports {{version}} template)
-  extract: bool          # Extract archive (default: false)
-  binary: string         # Path to binary in archive (if extract: true)
-  checksum_url: string   # Optional checksum URL
-```
+`chart` (required)
+Chart name in repository.
 
-**Example**:
-```yaml
-tools:
-  - name: helm
-    version: "3.14.0"
-    url: "https://get.helm.sh/helm-v{{version}}-linux-amd64.tar.gz"
-    extract: true
-    binary: linux-amd64/helm
+`version` (required)
+Chart version.
 
-  - name: k9s
-    version: "0.32.4"
-    url: "https://github.com/derailed/k9s/releases/download/v{{version}}/k9s_Linux_amd64.tar.gz"
-    extract: true
-    binary: k9s
-```
+`values` (optional)
+Default values to include. Merged with user-provided values at deploy time.
 
-## RepositorySpec
+### binary
+
+Executable binary to include.
 
 ```yaml
-- name: string    # Repository name
-  url: string     # Git URL
-  ref: string     # Git ref (branch, tag, or commit SHA)
-  type: string    # Repository type (default: "git")
+- name: kubectl
+  type: binary
+  url: https://dl.k8s.io/release/v1.34.3/bin/linux/amd64/kubectl
+  checksum: sha256:a1b2c3d4...
+  destination: /usr/local/bin/kubectl
+  mode: "0755"
 ```
 
-**Example**:
-```yaml
-repositories:
-  - name: kubespray
-    url: "https://github.com/kubernetes-sigs/kubespray.git"
-    ref: "master"
+**Fields**:
 
-  - name: opencenter-gitops-base
-    url: "https://github.com/rackerlabs/opencenter-gitops-base.git"
-    ref: "v1.0.0"
-```
+`url` (required)
+Download URL.
 
-## ImageSpec
+`checksum` (required)
+SHA256 checksum. Format: `sha256:hexdigest`.
 
-```yaml
-images:
-  auto_discover: list[ImageDiscoverySpec]
-  additional: list[string]
-```
+`destination` (required)
+Install path on target nodes.
 
-### ImageDiscoverySpec
+`mode` (optional)
+File permissions. Default: `0755`.
+
+### file
+
+Arbitrary file to include.
 
 ```yaml
-- source: string         # Repository reference (e.g., "repositories.kubespray")
-  patterns: list[string] # File patterns to scan
+- name: custom-config
+  type: file
+  source: config/custom.yaml
+  destination: /etc/kubernetes/custom.yaml
+  mode: "0644"
 ```
 
-**Example**:
-```yaml
-images:
-  auto_discover:
-    - source: repositories.kubespray
-      patterns:
-        - "roles/*/defaults/main.yml"
-        - "inventory/*/group_vars/*.yml"
+**Fields**:
 
-    - source: repositories.opencenter-gitops-base
-      patterns:
-        - "**/*.yaml"
+`source` (required)
+Local file path (relative to manifest) or URL.
 
-  additional:
-    - "docker.io/grafana/grafana:10.2.0"
-    - "quay.io/prometheus/prometheus:v2.48.0"
-    - "registry.k8s.io/kube-apiserver:v1.34.3"
-```
+`destination` (required)
+Install path on target nodes.
 
-## ChartSpec
+`mode` (optional)
+File permissions. Default: `0644`.
+
+### repository
+
+Git repository to clone.
 
 ```yaml
-- name: string      # Chart name
-  repo: string      # Helm repository URL
-  version: string   # Chart version
+- name: kubespray
+  type: repository
+  url: https://github.com/kubernetes-sigs/kubespray.git
+  ref: v2.24.0
+  destination: /opt/opencenter/kubespray
 ```
 
-**Example**:
-```yaml
-charts:
-  - name: cert-manager
-    repo: "https://charts.jetstack.io"
-    version: "v1.13.0"
+**Fields**:
 
-  - name: ingress-nginx
-    repo: "https://kubernetes.github.io/ingress-nginx"
-    version: "4.8.3"
-```
+`url` (required)
+Git repository URL.
 
-## OSPackageSpec
+`ref` (required)
+Git ref (tag, branch, or commit SHA).
 
-```yaml
-os_packages:
-  ubuntu_24_04: bool  # Collect Ubuntu 24.04 packages (default: true)
-```
-
-**Example**:
-```yaml
-os_packages:
-  ubuntu_24_04: true
-```
-
-**Note**: OS packages are collected by kubespray-offline. This setting enables/disables collection.
-
-## PythonPackageSpec
-
-```yaml
-python_packages:
-  requirements_file: string  # Path to requirements.txt
-```
-
-**Example**:
-```yaml
-python_packages:
-  requirements_file: "requirements.txt"
-```
-
-**Note**: Python packages are collected by kubespray-offline from specified requirements file.
-
-## TerraformProviderSpec
-
-```yaml
-- name: string       # Provider name
-  version: string    # Provider version
-  platform: string   # Platform (e.g., "linux_amd64")
-```
-
-**Example**:
-```yaml
-terraform_providers:
-  - name: openstack
-    version: "1.54.1"
-    platform: "linux_amd64"
-
-  - name: local
-    version: "2.4.0"
-    platform: "linux_amd64"
-```
-
-## Template Variables
-
-Use `{{variable}}` syntax for version interpolation:
-
-```yaml
-tools:
-  - name: kubectl
-    version: "1.34.3"
-    url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubectl"
-```
-
-Resolves to: `https://dl.k8s.io/v1.34.3/bin/linux/amd64/kubectl`
-
-**Supported Variables**:
-- `{{version}}`: Component version field
+`destination` (required)
+Clone path on bastion.
 
 ## Validation Rules
 
-### Required Fields
-
-**ToolSpec**:
-- `name` (string, non-empty)
-- `version` (string, non-empty)
-- `url` (string, valid URL)
-
-**RepositorySpec**:
-- `name` (string, non-empty)
-- `url` (string, valid Git URL)
-- `ref` (string, non-empty)
-
-**ChartSpec**:
-- `name` (string, non-empty)
-- `repo` (string, valid URL)
-- `version` (string, non-empty)
-
-### Format Rules
-
-**Version Strings**:
-- Semantic versioning recommended (e.g., "1.2.3")
-- Prefix "v" optional (e.g., "v1.2.3" or "1.2.3")
-
-**URLs**:
-- Must start with `http://` or `https://`
-- Git URLs may use `git://` or `ssh://`
-
-**Git Refs**:
-- Branch names (e.g., "master", "main")
-- Tags (e.g., "v1.0.0")
-- Commit SHAs (e.g., "a1b2c3d4...")
+**Component Names**:
+- Must be lowercase alphanumeric with hyphens
+- Must start with letter
+- Max 63 characters
+- Must be unique within manifest
 
 **Image References**:
-- Format: `[registry/]repository:tag`
-- Registry optional (defaults to docker.io)
-- Tag required
+- Must include registry, repository, and tag
+- Digest is optional but recommended
+- Tag must not be `latest` in production
 
-## Complete Example
+**Versions**:
+- Must follow semantic versioning (major.minor.patch)
+- Pre-release and build metadata allowed (e.g., `1.2.3-rc1+build.123`)
+
+**URLs**:
+- Must be HTTPS (HTTP allowed only for localhost)
+- Must be reachable at build time
+
+**Checksums**:
+- Must be SHA256
+- Format: `sha256:` followed by 64 hex characters
+
+**File Modes**:
+- Must be octal string (e.g., `"0755"`, not `755`)
+- Executables: `0755`
+- Configs: `0644`
+- Secrets: `0600`
+
+## Example Manifest
 
 ```yaml
-kubernetes:
-  version: "1.34.3"
-  binaries:
-    - name: kubectl
-      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubectl"
-    - name: kubelet
-      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubelet"
-    - name: kubeadm
-      url: "https://dl.k8s.io/v{{version}}/bin/linux/amd64/kubeadm"
+apiVersion: v1
+metadata:
+  name: opencenter-airgap
+  version: 1.0.0
+  description: Air-gapped Kubernetes deployment package
 
-tools:
-  - name: helm
-    version: "3.14.0"
-    url: "https://get.helm.sh/helm-v{{version}}-linux-amd64.tar.gz"
-    extract: true
-    binary: linux-amd64/helm
+components:
+  # Container images
+  - name: registry
+    type: image
+    image: docker.io/library/registry:2.8.3
+    digest: sha256:a1b2c3d4e5f6...
+    platform: linux/amd64
 
-  - name: k9s
-    version: "0.32.4"
-    url: "https://github.com/derailed/k9s/releases/download/v{{version}}/k9s_Linux_amd64.tar.gz"
-    extract: true
-    binary: k9s
+  - name: nginx
+    type: image
+    image: docker.io/library/nginx:1.29.2
+    platform: linux/amd64
 
-repositories:
-  - name: kubespray
-    url: "https://github.com/kubernetes-sigs/kubespray.git"
-    ref: "master"
-
-  - name: opencenter-gitops-base
-    url: "https://github.com/rackerlabs/opencenter-gitops-base.git"
-    ref: "v1.0.0"
-
-images:
-  auto_discover:
-    - source: repositories.kubespray
-      patterns:
-        - "roles/*/defaults/main.yml"
-        - "inventory/*/group_vars/*.yml"
-
-  additional:
-    - "docker.io/grafana/grafana:10.2.0"
-    - "quay.io/prometheus/prometheus:v2.48.0"
-
-charts:
+  # Helm charts
   - name: cert-manager
-    repo: "https://charts.jetstack.io"
-    version: "v1.13.0"
+    type: chart
+    repository: https://charts.jetstack.io
+    chart: cert-manager
+    version: v1.13.0
+    values:
+      installCRDs: true
 
   - name: ingress-nginx
-    repo: "https://kubernetes.github.io/ingress-nginx"
-    version: "4.8.3"
+    type: chart
+    repository: https://kubernetes.github.io/ingress-nginx
+    chart: ingress-nginx
+    version: 4.7.0
 
-os_packages:
-  ubuntu_24_04: true
+  # Binaries
+  - name: kubectl
+    type: binary
+    url: https://dl.k8s.io/release/v1.34.3/bin/linux/amd64/kubectl
+    checksum: sha256:abc123...
+    destination: /usr/local/bin/kubectl
+    mode: "0755"
 
-python_packages:
-  requirements_file: "requirements.txt"
+  - name: kubelet
+    type: binary
+    url: https://dl.k8s.io/release/v1.34.3/bin/linux/amd64/kubelet
+    checksum: sha256:def456...
+    destination: /usr/local/bin/kubelet
+    mode: "0755"
 
-terraform_providers:
-  - name: openstack
-    version: "1.54.1"
-    platform: "linux_amd64"
+  # Files
+  - name: offline-repo-playbook
+    type: file
+    source: playbooks/offline-repo.yml
+    destination: /opt/opencenter/playbook/offline-repo.yml
+    mode: "0644"
+
+  # Repositories
+  - name: kubespray
+    type: repository
+    url: https://github.com/kubernetes-sigs/kubespray.git
+    ref: v2.24.0
+    destination: /opt/opencenter/kubespray
+
+  - name: kubespray-offline
+    type: repository
+    url: https://github.com/kubespray-offline/kubespray-offline.git
+    ref: main
+    destination: /opt/opencenter/kubespray-offline
 ```
+
+## Schema Validation
+
+Validate manifest before build:
+
+```bash
+opencenter-build build --config components.yaml --validate-only
+```
+
+Or use JSON Schema validator:
+
+```bash
+jsonschema -i components.yaml config/schemas/components.schema.json
+```
+
+## Common Errors
+
+**Error**: `Component name 'My-Component' is invalid`
+**Fix**: Use lowercase: `my-component`
+
+**Error**: `Image 'nginx:latest' uses mutable tag`
+**Fix**: Pin version: `nginx:1.25.0` or use digest
+
+**Error**: `Checksum format invalid: abc123`
+**Fix**: Prefix with algorithm: `sha256:abc123...`
+
+**Error**: `Duplicate component name: kubectl`
+**Fix**: Component names must be unique. Use `kubectl-v1` and `kubectl-v2` if you need multiple versions.
+
+**Error**: `URL must be HTTPS: http://example.com/file`
+**Fix**: Use HTTPS or add to allowed HTTP hosts in config
+
+## See Also
+
+- [CLI Commands](cli-commands.md)
+- [Build Steps](build-steps.md)
+- [Component Independence](component-independence.md)

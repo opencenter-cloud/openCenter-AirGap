@@ -1,559 +1,463 @@
-# Troubleshooting Guide
-
 **doc_type: reference**
 
-Common issues and solutions for openCenter AirGap build system.
+# Troubleshooting
 
-## Build Issues
+Common errors and solutions.
 
-### Network Timeout During Asset Collection
+## Build Phase
 
-**Symptom**:
+### Connection Timeout During Download
+
+**Symptom**: `ERROR [network] Failed to download: connection timeout`
+
+**Causes**:
+- Firewall blocking outbound HTTPS
+- Proxy not configured
+- Rate limiting from upstream
+
+**Solutions**:
+
+Check firewall rules:
+```bash
+curl -I https://registry.k8s.io
+curl -I https://github.com
 ```
-Error: Network timeout downloading kubernetes-cni
-Build failed at step: collect_kubespray_offline
+
+Configure proxy if needed:
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+opencenter-build build --config components.yaml
 ```
 
-**Cause**: Transient network issues or rate limiting.
+Add retry with backoff (automatic in v1.1.0+):
+```bash
+opencenter-build build --config components.yaml --retry 5 --backoff exponential
+```
+
+See [Firewall Whitelist](firewall-whitelist.md) for required endpoints.
+
+### Disk Space Exhausted
+
+**Symptom**: `ERROR [build] No space left on device`
+
+**Check usage**:
+```bash
+df -h build/ dist/
+du -sh build/* | sort -h
+```
+
+**Solutions**:
+
+Clean previous builds:
+```bash
+opencenter-build build --clean
+```
+
+Use external volume:
+```bash
+opencenter-build build --work-dir /mnt/large-disk/build --output-dir /mnt/large-disk/dist
+```
+
+Remove intermediate files after successful build (automatic):
+```bash
+rm -rf build/kubespray-offline/outputs/cache
+```
+
+### Image Pull Fails with Digest Mismatch
+
+**Symptom**: `ERROR [images] Digest mismatch for nginx:1.25.0`
+
+**Cause**: Upstream image was updated with same tag (mutable tag).
 
 **Solution**:
+
+Update digest in manifest:
 ```bash
-# Resume build after network recovers
-opencenter-airgap build --resume
+# Get current digest
+skopeo inspect docker://docker.io/library/nginx:1.25.0 | jq -r '.Digest'
+
+# Update components.yaml
+- name: nginx
+  type: image
+  image: docker.io/library/nginx:1.25.0
+  digest: sha256:NEW_DIGEST_HERE
 ```
 
-Build state persists to `build/state.json`. Resume skips completed steps.
-
-### Insufficient Disk Space
-
-**Symptom**:
-```
-Error: No space left on device
-OSError: [Errno 28] No space left on device
-```
-
-**Cause**: Build requires 100GB+ free space.
-
-**Solution**:
-```bash
-# Check available space
-df -h
-
-# Clean previous builds
-opencenter-airgap clean
-
-# Remove Docker images/containers
-docker system prune -a
-
-# Retry build
-opencenter-airgap build
-```
-
-### Build State Corrupted
-
-**Symptom**:
-```
-Error: Invalid state file
-JSONDecodeError: Expecting value: line 1 column 1 (char 0)
-```
-
-**Cause**: Corrupted `build/state.json` from interrupted write.
-
-**Solution**:
-```bash
-# Remove corrupted state
-rm build/state.json
-
-# Clean build
-opencenter-airgap build --clean
-```
-
-### Python Dependency Conflict
-
-**Symptom**:
-```
-ERROR: pip's dependency resolver does not currently take into account all the packages that are installed
-```
-
-**Cause**: Conflicting Python package versions.
-
-**Solution**:
-```bash
-# Create clean virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -e .
-
-# Retry build
-opencenter-airgap build
-```
-
-## Configuration Issues
-
-### Invalid Component Manifest
-
-**Symptom**:
-```
-Error: Invalid YAML syntax in config/components.yaml
-yaml.scanner.ScannerError: mapping values are not allowed here
-```
-
-**Cause**: YAML indentation error.
-
-**Solution**:
-```bash
-# Validate YAML syntax
-yamllint config/components.yaml
-
-# Check indentation (2 spaces recommended)
-cat -A config/components.yaml | grep "^  "
-```
-
-YAML requires consistent indentation. Use 2 spaces, not tabs.
-
-### Missing Required Fields
-
-**Symptom**:
-```
-Error: Missing required field 'version' in tool 'helm'
-ValidationError: 1 validation error for ToolSpec
-```
-
-**Cause**: Component manifest missing required fields.
-
-**Solution**:
-```bash
-# Validate manifest
-opencenter-airgap validate --strict
-
-# Check schema
-cat docs/reference/component-manifest-schema.md
-```
-
-Required fields:
-- Tools: `name`, `version`, `url`
-- Repositories: `name`, `url`, `ref`
-- Charts: `name`, `repo`, `version`
-
-### URL Not Reachable
-
-**Symptom**:
-```
-Warning: URL not reachable: https://example.com/tool.tar.gz
-HTTPError: 404 Client Error: Not Found
-```
-
-**Cause**: Invalid URL or network issue.
-
-**Solution**:
-```bash
-# Test URL manually
-curl -I https://example.com/tool.tar.gz
-
-# Validate with upstream check
-opencenter-airgap validate --check-upstream
-
-# Fix URL in config/components.yaml
-```
-
-## Discovery Issues
-
-### No Images Discovered
-
-**Symptom**:
-```
-Warning: No images discovered from repositories.kubespray
-config/all-images.txt is empty
-```
-
-**Cause**: Discovery patterns don't match actual file paths.
-
-**Solution**:
-```bash
-# List files in repository
-find build/kubespray -name "*.yml" | head -20
-
-# Check pattern matches
-grep -r "image:" build/kubespray/roles/*/defaults/main.yml
-
-# Adjust patterns in config/components.yaml
-```
-
-Example fix:
+Or remove digest to pull by tag (not recommended for production):
 ```yaml
-images:
-  auto_discover:
-    - source: repositories.kubespray
-      patterns:
-        - "roles/*/defaults/main.yml"  # Add this
-        - "roles/*/defaults/main.yaml" # And this
+- name: nginx
+  type: image
+  image: docker.io/library/nginx:1.25.0
+  # digest removed
 ```
 
-### Image Discovery Misses Images
+### Validation Error: Invalid Component Name
 
-**Symptom**: Expected images not in `config/all-images.txt`.
+**Symptom**: `ERROR [validation] Component name 'My_Component' is invalid`
 
-**Cause**: Images in files not matched by patterns.
+**Rule**: Names must be lowercase alphanumeric with hyphens, start with letter.
+
+**Fix**:
+```yaml
+# Bad
+- name: My_Component
+
+# Good
+- name: my-component
+```
+
+### SBOM Generation Fails
+
+**Symptom**: `ERROR [sbom] Failed to generate SBOM: syft not found`
 
 **Solution**:
+
+Install syft:
 ```bash
-# Search for missing image
-grep -r "missing/image:tag" build/
-
-# Add explicit image
-opencenter-airgap add image docker.io/missing/image:tag
-
-# Or expand discovery patterns
+curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 ```
 
-### Duplicate Images
-
-**Symptom**:
-```
-Warning: Duplicate image: registry.k8s.io/kube-apiserver:v1.34.3
-```
-
-**Cause**: Image in both auto-discovery and explicit additions.
-
-**Solution**:
+Or skip SBOM (not recommended):
 ```bash
-# Remove from explicit additions in config/components.yaml
-# Auto-discovery will find it
+opencenter-build build --skip-sbom
 ```
 
-## Package Issues
+## Deploy Phase
 
-### Zarf Package Creation Failed
+### Zarf Deploy Fails: Package Corrupted
 
-**Symptom**:
-```
-Error: failed to create package
-zarf package create failed with exit code 1
-```
+**Symptom**: `ERROR: failed to extract package: unexpected EOF`
 
-**Cause**: Invalid `zarf.yaml` or missing artifacts.
-
-**Solution**:
+**Verify integrity**:
 ```bash
-# Validate Zarf manifest
-zarf package create --confirm --dry-run
-
-# Check Zarf logs
-cat /tmp/zarf-*.log
-
-# Regenerate manifest
-opencenter-airgap generate-manifest
+sha256sum -c zarf-package-*.sha256
 ```
 
-### Package Signature Verification Failed
+If checksum fails, package was corrupted during transfer. Re-copy from source.
 
-**Symptom**:
-```
-Error: signature verification failed
-cosign verify failed: no matching signatures
-```
+### Registry Fails to Start
 
-**Cause**: Package not signed or invalid signature.
+**Symptom**: `ERROR: registry container exited with code 1`
 
-**Solution**:
+**Check logs**:
 ```bash
-# Verify package manually
-cosign verify --key cosign.pub dist/zarf-package-*.tar.zst
-
-# Deploy without verification (not recommended)
-opencenter-airgap serve dist/zarf-package-*.tar.zst --no-verify
+podman logs registry
 ```
 
-### Package Size Unexpected
+**Common causes**:
 
-**Symptom**: Package size significantly different from expected.
-
-**Cause**: Auto-discovery found more/fewer images than expected.
-
-**Solution**:
+Port 5000 already in use:
 ```bash
-# Check artifact manifest
-cat dist/artifact-manifest.md
-
-# Compare image counts
-grep "Image Count:" dist/artifact-manifest.md
-
-# Inspect package contents
-zarf package inspect dist/zarf-package-*.tar.zst --sbom
+lsof -i :5000
+# Kill conflicting process or change port
 ```
 
-## Deployment Issues
-
-### Services Not Accessible
-
-**Symptom**: Cannot access registry or nginx after deployment.
-
-**Cause**: Services not started or port conflicts.
-
-**Solution**:
+Insufficient disk space:
 ```bash
-# Check service status
-docker ps
-
-# Check logs
-docker logs <container-id>
-
-# Verify ports
-netstat -tlnp | grep -E '(80|5000|3000)'
-
-# Restart services
-docker restart <container-id>
+df -h /opt/opencenter
 ```
 
-### Registry Not Serving Images
-
-**Symptom**:
-```
-Error: failed to pull image: registry:5000/image:tag
-Get "http://registry:5000/v2/": dial tcp: connection refused
-```
-
-**Cause**: Registry container not running or not accessible.
-
-**Solution**:
+Permission denied:
 ```bash
-# Check registry container
-docker ps | grep registry
-
-# Test registry endpoint
-curl http://localhost:5000/v2/_catalog
-
-# Check registry logs
-docker logs <registry-container-id>
-
-# Restart registry
-docker restart <registry-container-id>
+sudo chown -R $(whoami):$(whoami) /opt/opencenter/images
 ```
 
-### Nginx Not Serving Files
+### Nginx Fails to Serve Packages
 
-**Symptom**:
-```
-Error: 404 Not Found
-curl http://localhost/files/kubectl
-```
+**Symptom**: `curl http://localhost:8080/debs/ returns 404`
 
-**Cause**: Nginx container not running or volume mounts incorrect.
-
-**Solution**:
+**Check nginx status**:
 ```bash
-# Check nginx container
-docker ps | grep nginx
-
-# Check volume mounts
-docker inspect <nginx-container-id> | grep -A 10 Mounts
-
-# Test nginx endpoint
-curl http://localhost/files/
-
-# Check nginx logs
-docker logs <nginx-container-id>
+systemctl status nginx-opencenter
+journalctl -u nginx-opencenter -n 50
 ```
 
-### Deployment Fails on Target Nodes
-
-**Symptom**: Kubespray deployment fails on target nodes.
-
-**Cause**: Nodes cannot reach bastion services.
-
-**Solution**:
+**Verify files exist**:
 ```bash
-# Test connectivity from node
-ssh node1
-curl http://bastion:5000/v2/_catalog
-curl http://bastion/files/kubectl
+ls -la /opt/opencenter/debs/
+```
 
-# Check firewall rules
-sudo iptables -L -n
+**Check nginx config**:
+```bash
+cat /etc/nginx/sites-enabled/opencenter.conf
+```
 
-# Verify bastion IP in inventory
-cat /opt/opencenter/kubespray/inventory/mycluster/hosts.yml
+Expected:
+```nginx
+server {
+    listen 8080;
+    root /opt/opencenter;
+    autoindex on;
+}
+```
+
+Restart nginx:
+```bash
+sudo systemctl restart nginx-opencenter
+```
+
+### Ansible Fails: Unreachable Host
+
+**Symptom**: `UNREACHABLE! => {"changed": false, "msg": "Failed to connect to the host via ssh"}`
+
+**Test SSH manually**:
+```bash
+ssh -i ~/.ssh/id_rsa user@node1
+```
+
+**Common fixes**:
+
+Add SSH key to agent:
+```bash
+eval $(ssh-agent)
+ssh-add ~/.ssh/id_rsa
+```
+
+Update inventory with correct user:
+```yaml
+all:
+  hosts:
+    node1:
+      ansible_host: 192.168.1.101
+      ansible_user: ubuntu  # Add this
+      ansible_ssh_private_key_file: ~/.ssh/id_rsa  # Add this
+```
+
+Disable host key checking (first run only):
+```bash
+export ANSIBLE_HOST_KEY_CHECKING=False
+ansible-playbook -i inventory.yml cluster.yml
+```
+
+### Kubespray Fails: Package Not Found
+
+**Symptom**: `E: Unable to locate package kubelet`
+
+**Cause**: Nodes not configured to use bastion repos.
+
+**Fix**:
+
+Run offline-repo playbook:
+```bash
+cd /opt/opencenter/playbook
+ansible-playbook -i ../kubespray/inventory/mycluster/inventory.yml offline-repo.yml
+```
+
+Verify apt sources on node:
+```bash
+ssh node1 "cat /etc/apt/sources.list.d/opencenter.list"
+```
+
+Expected:
+```
+deb [trusted=yes] http://BASTION_IP:8080/debs/ubuntu jammy main
+```
+
+Test package availability:
+```bash
+ssh node1 "apt-cache policy kubelet"
+```
+
+### Pods Stuck in ImagePullBackOff
+
+**Symptom**: `kubectl get pods shows ImagePullBackOff`
+
+**Check containerd config on node**:
+```bash
+ssh node1 "cat /etc/containerd/config.toml | grep registry"
+```
+
+Expected:
+```toml
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+  endpoint = ["http://BASTION_IP:5000"]
+```
+
+**Verify registry is reachable**:
+```bash
+ssh node1 "curl http://BASTION_IP:5000/v2/_catalog"
+```
+
+**Check image exists in registry**:
+```bash
+curl http://BASTION_IP:5000/v2/_catalog | jq '.repositories'
+```
+
+**Restart containerd on node**:
+```bash
+ssh node1 "sudo systemctl restart containerd"
+```
+
+### FluxCD Fails to Reconcile
+
+**Symptom**: `kubectl get kustomizations shows "reconciliation failed"`
+
+**Check Flux logs**:
+```bash
+kubectl logs -n flux-system deploy/source-controller
+kubectl logs -n flux-system deploy/kustomize-controller
+```
+
+**Common causes**:
+
+Gitea not reachable:
+```bash
+kubectl get svc -n gitea
+curl http://gitea.gitea.svc.cluster.local:3000
+```
+
+Git credentials missing:
+```bash
+kubectl get secret -n flux-system flux-system
+```
+
+Kustomization syntax error:
+```bash
+flux reconcile kustomization flux-system --with-source
+```
+
+## Verification Phase
+
+### SBOM Validation Fails
+
+**Symptom**: `ERROR [verify] SBOM validation failed: missing components`
+
+**Inspect SBOM**:
+```bash
+jq '.artifacts[] | select(.name == "kubectl")' zarf-package-*-sbom.json
+```
+
+**Regenerate SBOM**:
+```bash
+opencenter-build build --config components.yaml --force-sbom
+```
+
+### Signature Verification Fails
+
+**Symptom**: `ERROR [verify] Signature verification failed: invalid signature`
+
+**Check public key**:
+```bash
+cat ~/.opencenter/cosign.pub
+```
+
+**Verify manually with cosign**:
+```bash
+cosign verify --key ~/.opencenter/cosign.pub zarf-package-*.tar.zst
+```
+
+**Re-sign package** (if you have private key):
+```bash
+cosign sign --key ~/.opencenter/cosign.key zarf-package-*.tar.zst
 ```
 
 ## Performance Issues
 
-### Slow Repository Scanning
+### Build Takes Too Long
 
-**Symptom**: Repository scanning takes >5 minutes.
+**Symptom**: Build exceeds 60 minutes
 
-**Cause**: Sequential processing or low worker count.
-
-**Solution**:
+**Profile build**:
 ```bash
-# Increase concurrency
-opencenter-airgap scan --discover-images --concurrency 16
-
-# Check CPU count
-nproc
-
-# Default uses all CPUs
-opencenter-airgap scan --discover-images
+opencenter-build build --config components.yaml --profile
 ```
 
-### Slow Asset Collection
+**Common bottlenecks**:
 
-**Symptom**: Asset collection takes >30 minutes.
+Network downloads (30-40 minutes expected):
+- Use faster network
+- Enable parallel downloads: `--parallel 8`
+- Use local mirror for common images
 
-**Cause**: Network bandwidth or kubespray-offline performance.
+Image compression (5-10 minutes expected):
+- Use faster CPU
+- Reduce compression level: `--compression-level 6` (default: 9)
 
-**Solution**:
+SBOM generation (2-5 minutes expected):
+- Skip for development builds: `--skip-sbom`
+
+### Deploy Takes Too Long
+
+**Symptom**: Kubespray exceeds 45 minutes
+
+**Enable Ansible profiling**:
 ```bash
-# Check network speed
-speedtest-cli
-
-# Monitor download progress
-tail -f build/kubespray-offline/download.log
-
-# Resume if interrupted
-opencenter-airgap build --resume
+export ANSIBLE_CALLBACK_WHITELIST=profile_tasks
+ansible-playbook -i inventory.yml cluster.yml
 ```
 
-## CLI Issues
+**Common bottlenecks**:
 
-### Command Not Found
+Serial node processing:
+- Increase batch size in kubespray config: `serial: 10`
 
-**Symptom**:
-```
-bash: opencenter-airgap: command not found
-```
+Slow package installation:
+- Verify bastion network bandwidth
+- Check disk I/O: `iostat -x 1`
 
-**Cause**: Binary not in PATH.
+## Recovery Procedures
 
-**Solution**:
+### Resume Failed Build
+
 ```bash
-# Check installation
-which opencenter-airgap
-
-# Add to PATH
-export PATH=$PATH:/path/to/binary
-
-# Or install to system location
-sudo mv opencenter-airgap /usr/local/bin/
+opencenter-build build --config components.yaml --resume
 ```
 
-### Permission Denied
+State is saved in `build/.state.json`. Delete to start fresh.
 
-**Symptom**:
-```
-bash: ./opencenter-airgap: Permission denied
-```
+### Rollback Failed Deployment
 
-**Cause**: Binary not executable.
-
-**Solution**:
 ```bash
-# Make executable
-chmod +x opencenter-airgap
+# On bastion
+cd /opt/opencenter/kubespray
+ansible-playbook -i inventory/mycluster/inventory.yml reset.yml
 
-# Retry
-./opencenter-airgap version
+# Clean node state
+ansible -i inventory/mycluster/inventory.yml all -m shell -a "rm -rf /etc/kubernetes /var/lib/kubelet /var/lib/etcd"
 ```
 
-### Import Error (Running from Source)
+### Recover from Bastion Failure
 
-**Symptom**:
-```
-ImportError: No module named 'opencenter_build'
-ModuleNotFoundError: No module named 'typer'
-```
+If bastion loses power during deployment:
 
-**Cause**: Dependencies not installed.
-
-**Solution**:
+1. Restart services:
 ```bash
-# Install in development mode
-pip install -e .
-
-# Or install dependencies
-pip install -r requirements.txt
-
-# Verify installation
-python -c "import opencenter_build; print(opencenter_build.__version__)"
+sudo systemctl start registry-opencenter
+sudo systemctl start nginx-opencenter
 ```
 
-## Verification Issues
-
-### Checksum Mismatch
-
-**Symptom**:
-```
-Error: Checksum mismatch for kubectl
-Expected: a1b2c3d4...
-Got: e5f6g7h8...
-```
-
-**Cause**: File corrupted during transfer or tampering.
-
-**Solution**:
+2. Verify services:
 ```bash
-# Re-download artifact
-rm build/kubespray-offline/outputs/files/kubectl
-opencenter-airgap build --resume
-
-# Verify package integrity
-opencenter-airgap verify dist/zarf-package-*.tar.zst
+curl http://localhost:5000/v2/_catalog
+curl http://localhost:8080/debs/
 ```
 
-### Manifest Comparison Failed
-
-**Symptom**:
-```
-Error: Artifact manifest does not match package contents
-Missing artifacts: 3
-Extra artifacts: 1
-```
-
-**Cause**: Package modified after manifest generation.
-
-**Solution**:
+3. Resume Kubespray:
 ```bash
-# Rebuild package
-opencenter-airgap build --clean
-
-# Verify new package
-opencenter-airgap verify dist/zarf-package-*.tar.zst \
-  --manifest dist/artifact-manifest.json
+cd /opt/opencenter/kubespray
+ansible-playbook -i inventory/mycluster/inventory.yml cluster.yml
 ```
+
+Kubespray is idempotent. Re-running is safe.
 
 ## Getting Help
 
-### Enable Verbose Logging
+**Check logs**:
+- Build: `build.log`
+- Deploy: `/opt/opencenter/logs/deploy.log`
+- Kubespray: `/opt/opencenter/kubespray/inventory/mycluster/artifacts/ansible.log`
 
+**Enable debug logging**:
 ```bash
-# Verbose output
-opencenter-airgap build --verbose
-
-# JSON logs for parsing
-opencenter-airgap build --json > build.log
+opencenter-build --log-level DEBUG build --config components.yaml
 ```
 
-### Check Logs
-
-```bash
-# Build logs
-cat build/build.log
-
-# Zarf logs
-cat /tmp/zarf-*.log
-
-# Docker logs
-docker logs <container-id>
-```
-
-### Report Issues
-
+**Report issues**:
 Include:
-- Command executed
-- Error message
-- `opencenter-airgap version` output
-- Relevant logs
-- `config/components.yaml` (if applicable)
+- `build.log` or relevant log excerpt
+- `components.yaml`
+- Output of `opencenter-build --version`
+- OS version: `lsb_release -a`
 
-File issues: https://github.com/rackerlabs/opencenter-airgap/issues
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for issue reporting guidelines.

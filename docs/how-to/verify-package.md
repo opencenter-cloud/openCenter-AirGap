@@ -1,88 +1,205 @@
-doc_type: how-to
+**doc_type: how-to**
+**audience: Security Officers, Platform Engineers**
 
 # Verify Package Integrity
 
-Verify Zarf package integrity through signature validation, checksum verification, and manifest comparison.
+Check that a Zarf package hasn't been tampered with and contains expected components.
 
 ## Prerequisites
 
-- Built Zarf package (`dist/zarf-package-*.tar.zst`)
-- Optional: Cosign CLI for signature verification
-- Optional: Artifact manifest (`dist/artifact-manifest.json`)
+- Zarf package file (`.tar.zst`)
+- Corresponding `.sha256` and `-sbom.json` files
+- Public key for signature verification (if package is signed)
+- `opencenter-build` CLI or `zarf` CLI installed
 
-## Basic Verification
+## Verify Checksum
 
-Verify package structure and checksums:
+Compare package hash against published checksum:
 
 ```bash
-opencenter-airgap verify dist/zarf-package-opencenter-airgap-amd64-1.34.3.tar.zst
+sha256sum -c zarf-package-opencenter-airgap-amd64-1.0.0.sha256
+```
+
+Expected output:
+```
+zarf-package-opencenter-airgap-amd64-1.0.0.tar.zst: OK
+```
+
+If checksum fails, package was corrupted or modified. Do not deploy.
+
+## Verify Cryptographic Signature
+
+Requires public key from package maintainer.
+
+Install cosign:
+```bash
+curl -sL https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64 -o /usr/local/bin/cosign
+chmod +x /usr/local/bin/cosign
+```
+
+Verify signature:
+```bash
+cosign verify --key cosign.pub zarf-package-*.tar.zst
+```
+
+Expected output:
+```
+Verification for zarf-package-opencenter-airgap-amd64-1.0.0.tar.zst --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - The signatures were verified against the specified public key
+```
+
+If verification fails, package was signed with different key or modified after signing. Do not deploy.
+
+## Inspect SBOM
+
+View bill of materials:
+
+```bash
+zarf package inspect zarf-package-*.tar.zst --sbom
+```
+
+Or read SBOM file directly:
+```bash
+jq '.' zarf-package-*-sbom.json | less
+```
+
+### Check for Specific Components
+
+Verify kubectl is included:
+```bash
+jq '.artifacts[] | select(.name == "kubectl")' zarf-package-*-sbom.json
+```
+
+Expected output:
+```json
+{
+  "name": "kubectl",
+  "version": "1.34.3",
+  "type": "binary",
+  "checksum": "sha256:abc123..."
+}
+```
+
+List all container images:
+```bash
+jq '.artifacts[] | select(.type == "image") | .name' zarf-package-*-sbom.json
+```
+
+Count total artifacts:
+```bash
+jq '.artifacts | length' zarf-package-*-sbom.json
+```
+
+### Check for CVEs
+
+If SBOM includes vulnerability scan results:
+
+```bash
+jq '.vulnerabilities[] | select(.severity == "CRITICAL" or .severity == "HIGH")' zarf-package-*-sbom.json
+```
+
+No output means no HIGH or CRITICAL CVEs.
+
+## Verify Package Contents
+
+Extract package metadata without deploying:
+
+```bash
+zarf package inspect zarf-package-*.tar.zst
 ```
 
 Output shows:
-- Signature status (requires Cosign and `.sig` file)
-- Checksum validation (via Zarf inspect or magic bytes)
-- Overall verification result
+- Package name and version
+- Components included
+- Required Zarf variables
+- Deployment order
 
-## Verification with Manifest
-
-Compare package contents against artifact manifest:
-
+Check specific component:
 ```bash
-opencenter-airgap verify \
-  dist/zarf-package-opencenter-airgap-amd64-1.34.3.tar.zst \
-  --manifest dist/artifact-manifest.json
+zarf package inspect zarf-package-*.tar.zst | grep -A 10 "Component: kubespray"
 ```
 
-Validates:
-- Package filename matches manifest
-- Package size matches manifest (within 1%)
-- Package SHA256 checksum matches manifest
-- Image and repository counts match
+## Verify Against Policy
 
-## Signature Verification
+### Check Version Pins
 
-Generate and verify Cosign signature:
-
+Ensure no `latest` tags:
 ```bash
-# Sign package (build phase)
-cosign sign-blob \
-  --key cosign.key \
-  --output-signature dist/zarf-package-*.tar.zst.sig \
-  dist/zarf-package-*.tar.zst
-
-# Verify signature (deploy phase)
-opencenter-airgap verify dist/zarf-package-*.tar.zst
+jq '.artifacts[] | select(.type == "image") | select(.version == "latest")' zarf-package-*-sbom.json
 ```
 
-Verification automatically detects `.sig` file and validates if Cosign available.
+No output means all images are pinned.
 
-## Verification Checks
+### Check Allowed Registries
 
-| Check | Tool | Fallback |
-|-------|------|----------|
-| Signature | Cosign CLI | Skip if unavailable |
-| Checksums | Zarf inspect | Zstandard magic bytes |
-| Manifest | Zarf inspect + SHA256 | Basic validation |
+Verify images come from approved registries:
+```bash
+jq -r '.artifacts[] | select(.type == "image") | .name' zarf-package-*-sbom.json | cut -d/ -f1 | sort -u
+```
 
-## Exit Codes
+Compare against your approved registry list.
 
-- `0`: Verification passed
-- `1`: Verification failed (see error output)
+### Check License Compliance
+
+If SBOM includes license data:
+```bash
+jq '.artifacts[] | select(.licenses != null) | {name, licenses}' zarf-package-*-sbom.json
+```
+
+Flag any GPL or AGPL licenses if your policy prohibits them.
+
+## Automated Verification Script
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+PACKAGE="$1"
+PUBLIC_KEY="${2:-cosign.pub}"
+
+echo "==> Verifying checksum..."
+sha256sum -c "${PACKAGE}.sha256"
+
+echo "==> Verifying signature..."
+cosign verify --key "$PUBLIC_KEY" "$PACKAGE"
+
+echo "==> Checking for latest tags..."
+LATEST_COUNT=$(jq '[.artifacts[] | select(.type == "image") | select(.version == "latest")] | length' "${PACKAGE%.tar.zst}-sbom.json")
+if [ "$LATEST_COUNT" -gt 0 ]; then
+    echo "ERROR: Found $LATEST_COUNT images with 'latest' tag"
+    exit 1
+fi
+
+echo "==> Checking for HIGH/CRITICAL CVEs..."
+CVE_COUNT=$(jq '[.vulnerabilities[]? | select(.severity == "CRITICAL" or .severity == "HIGH")] | length' "${PACKAGE%.tar.zst}-sbom.json")
+if [ "$CVE_COUNT" -gt 0 ]; then
+    echo "WARNING: Found $CVE_COUNT HIGH/CRITICAL CVEs"
+    jq '.vulnerabilities[]? | select(.severity == "CRITICAL" or .severity == "HIGH")' "${PACKAGE%.tar.zst}-sbom.json"
+fi
+
+echo "==> Verification complete"
+```
+
+Usage:
+```bash
+chmod +x verify.sh
+./verify.sh zarf-package-*.tar.zst cosign.pub
+```
 
 ## Troubleshooting
 
-**Signature verification skipped**
-- Install Cosign: `brew install cosign` or `apt install cosign`
-- Ensure `.sig` file exists alongside package
+**Checksum file not found**: Ensure `.sha256` file is in same directory as package.
 
-**Checksum verification failed**
-- Package corrupted during transfer
-- Re-download or rebuild package
+**Signature verification fails**: Verify you have correct public key. Key must match private key used to sign package.
 
-**Manifest mismatch**
-- Package rebuilt without updating manifest
-- Rebuild both: `opencenter-airgap build --clean`
+**SBOM missing**: Package was built with `--skip-sbom`. Rebuild with SBOM generation enabled.
 
-**Zarf CLI not available**
-- Install Zarf: `brew install zarf` or download from releases
-- Verification falls back to basic magic byte check
+**CVE data missing**: Package was built without Trivy scanning. Rebuild with `--scan` flag.
+
+## See Also
+
+- [Security Scanning Reference](../reference/security-scanning.md)
+- [Secrets Management](../reference/secrets-management.md)
+- [Troubleshooting](../reference/troubleshooting.md)

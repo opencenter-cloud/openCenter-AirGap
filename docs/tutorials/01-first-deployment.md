@@ -1,284 +1,273 @@
----
-type: tutorial
-audience: platform-engineer, field-operator
-difficulty: beginner
-time: 30
-version: 1.0.0
-last_updated: 2026-01-25
-doc_type: tutorial
----
+**doc_type: tutorial**
+**audience: Platform Engineers, Field Operators**
+**duration: 60 minutes**
 
-# Tutorial: Your First Air-Gap Deployment
+# First Deployment
 
-Build a single-node Kubernetes cluster in a disconnected environment.
+Build and deploy an air-gapped Kubernetes cluster from scratch. You'll create a Zarf package on a connected machine, transfer it to a disconnected environment, and deploy a working cluster.
 
 ## What You'll Build
 
-A working Kubernetes cluster with core services, deployed without internet access. You'll learn the three-zone workflow: build in Zone A, transfer through Zone B, deploy in Zone C.
-
-## What You'll Learn
-
-- How the three-zone model works
-- Building an air-gap package
-- Deploying without internet
-- Verifying cluster health
-
-## Time Required
-
-30 minutes
+- A Zarf package containing all dependencies for a 3-node Kubernetes cluster
+- A bastion host serving local registry and package repositories
+- A functional Kubernetes cluster with FluxCD, Gitea, and ingress-nginx
 
 ## Prerequisites
 
-**Build Host (Zone A)**
-- Ubuntu 24.04 LTS
-- 8GB RAM, 100GB disk
-- Internet access
-- Podman installed
+**Zone A (Build Host)**:
+- Ubuntu 24.04 with internet access
+- 100GB free disk space
+- Python 3.10+, Git installed
+- Zarf CLI installed: `curl -sL https://get.zarf.dev | bash`
 
-**Target Node (Zone C)**
-- Ubuntu 24.04 LTS  
-- 16GB RAM, 100GB disk
-- No internet access
-- SSH access from build host
+**Zone C (Target Environment)**:
+- 4 Ubuntu 24.04 nodes (1 bastion + 3 cluster nodes)
+- SSH access between bastion and cluster nodes
+- 100GB free disk on bastion
+- Network connectivity: bastion can reach cluster nodes on ports 22, 6443, 10250
 
-**Your Machine**
-- SSH client
-- USB drive or network file transfer
-
-## Step 1: Set Up Build Environment
+## Step 1: Clone and Configure
 
 On your build host:
 
 ```bash
-# Clone repository
 git clone https://github.com/your-org/opencenter-airgap.git
 cd opencenter-airgap
-
-# Create Python environment
-python3.12 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install pyyaml jinja2 requests
 ```
 
-Check your setup:
+Review the component manifest:
 
 ```bash
-python --version  # Should show 3.12+
-podman --version  # Should show 4.x+
+cat config/components.yaml
 ```
 
-## Step 2: Configure Versions
+This defines what gets packaged. For your first build, use the defaults.
 
-Open `config/versions.env`:
+Check pinned versions:
 
 ```bash
-# These versions are already set correctly
-# Just verify they're present
 cat config/versions.env
 ```
 
-You should see:
-```
-KUBESPRAY_VERSION=master
-RUNC_VERSION=1.3.4
-CONTAINERD_VERSION=2.1.5
-...
-```
+These versions are tested together. Don't change them unless you're troubleshooting a specific issue.
 
-No changes needed for this tutorial.
-
-## Step 3: Build the Package
-
-Run the build script:
+## Step 2: Run the Build
 
 ```bash
-./scripts/build/build.sh
+python3 -m opencenter_build build --config config/components.yaml
 ```
 
-This takes 15-20 minutes. You'll see:
-- Asset downloads from internet
-- Image pulls
-- Package creation
-- SBOM generation
+This takes 30-45 minutes. It will:
 
-When complete:
-```
-==> Build complete: dist/zarf-package-opencenter-airgap-amd64-1.0.0.tar.zst
-```
+1. Clone kubespray-offline
+2. Download container images (~15GB)
+3. Download OS packages (~8GB)
+4. Download Python wheels (~500MB)
+5. Download Kubernetes binaries (~2GB)
+6. Create Zarf package (~25GB compressed)
 
-Check the package:
+Watch for errors. If a download fails, the build will retry automatically.
+
+## Step 3: Verify the Package
+
 ```bash
 ls -lh dist/
-# Should show ~5-8GB package file
 ```
 
-## Step 4: Transfer to Target
+You should see:
+- `zarf-package-opencenter-airgap-amd64-<version>.tar.zst` (the artifact)
+- `zarf-package-opencenter-airgap-amd64-<version>-sbom.json` (bill of materials)
+- `zarf-package-opencenter-airgap-amd64-<version>.sha256` (checksum)
 
-Copy the package to your target node:
+Verify integrity:
 
 ```bash
-# Using SCP (if temporary network access)
-scp dist/zarf-package-*.tar.zst deployer@target-node:/opt/
+zarf package inspect dist/zarf-package-*.tar.zst --sbom
+```
 
-# Or copy to USB drive
+Check that the SBOM lists expected components (kubelet, containerd, calico, flux, etc.).
+
+## Step 4: Transfer to Zone C
+
+Copy the package to removable media:
+
+```bash
 cp dist/zarf-package-*.tar.zst /media/usb/
 ```
 
-On the target node, verify the file:
-```bash
-ls -lh /opt/zarf-package-*.tar.zst
-```
+Physically transport the media to your disconnected environment.
 
-## Step 5: Deploy the Cluster
-
-On the target node (which will act as both bastion and cluster node):
+On the bastion host in Zone C:
 
 ```bash
+cp /media/usb/zarf-package-*.tar.zst /opt/
 cd /opt
-
-# Deploy package
-zarf package deploy zarf-package-*.tar.zst \
-  --set DEPLOYMENT_MODE=baremetal \
-  --set BASTION_IP=127.0.0.1 \
-  --set SSH_USER=deployer \
-  --confirm
 ```
 
-This takes 10-15 minutes. You'll see:
-- Package extraction
-- Bastion services starting
-- Kubespray execution
-- Cluster bootstrap
+## Step 5: Deploy the Package
 
-## Step 6: Verify the Cluster
+On the bastion:
 
-Check bastion services:
 ```bash
-curl http://localhost/files/
-curl http://localhost:35000/v2/_catalog
+zarf package deploy zarf-package-*.tar.zst --confirm
 ```
 
-Both should return data.
+Zarf will:
+1. Extract the package to `/opt/opencenter/`
+2. Start local registry on port 5000
+3. Start nginx on port 8080 serving packages
+4. Load container images into registry
+5. Set up apt and pip repositories
 
-Check Kubernetes:
+This takes 10-15 minutes.
+
+## Step 6: Prepare Cluster Nodes
+
+Create an inventory file on the bastion:
+
 ```bash
-export KUBECONFIG=/opt/opencenter/kubespray-master/inventory/mycluster/artifacts/admin.conf
+cat > /opt/opencenter/kubespray/inventory/mycluster/inventory.yml <<EOF
+all:
+  hosts:
+    node1:
+      ansible_host: 192.168.1.101
+      ip: 192.168.1.101
+    node2:
+      ansible_host: 192.168.1.102
+      ip: 192.168.1.102
+    node3:
+      ansible_host: 192.168.1.103
+      ip: 192.168.1.103
+  children:
+    kube_control_plane:
+      hosts:
+        node1:
+    kube_node:
+      hosts:
+        node1:
+        node2:
+        node3:
+    etcd:
+      hosts:
+        node1:
+    k8s_cluster:
+      children:
+        kube_control_plane:
+        kube_node:
+EOF
+```
 
+Replace the IPs with your actual node addresses.
+
+Configure nodes to use bastion repositories:
+
+```bash
+cd /opt/opencenter/playbook
+ansible-playbook -i ../kubespray/inventory/mycluster/inventory.yml offline-repo.yml
+```
+
+This configures apt and pip on each node to pull from the bastion instead of the internet.
+
+## Step 7: Deploy Kubernetes
+
+```bash
+cd /opt/opencenter/kubespray
+ansible-playbook -i inventory/mycluster/inventory.yml cluster.yml
+```
+
+This takes 20-30 minutes. Kubespray will:
+1. Install container runtime (runc, containerd)
+2. Install Kubernetes binaries (kubelet, kubectl, kubeadm)
+3. Bootstrap etcd and control plane
+4. Join worker nodes
+5. Install Calico CNI
+
+## Step 8: Verify the Cluster
+
+On the bastion:
+
+```bash
+export KUBECONFIG=/opt/opencenter/kubespray/inventory/mycluster/artifacts/admin.conf
 kubectl get nodes
 ```
 
-You should see:
+Expected output:
+
 ```
 NAME    STATUS   ROLES           AGE   VERSION
-node1   Ready    control-plane   5m    v1.30.0
+node1   Ready    control-plane   5m    v1.34.3
+node2   Ready    <none>          4m    v1.34.3
+node3   Ready    <none>          4m    v1.34.3
 ```
 
-Check pods:
+Check that all pods are running:
+
 ```bash
 kubectl get pods -A
 ```
 
-All pods should be Running or Completed.
+You should see pods in namespaces: kube-system, calico-system, flux-system, gitea, ingress-nginx.
 
-## Step 7: Access Services
+## Step 9: Access Gitea
 
-Check what's running:
+Find the Gitea ingress:
+
 ```bash
-kubectl get pods -n flux-system
-kubectl get pods -n gitea
-kubectl get pods -n monitoring
+kubectl get ingress -n gitea
 ```
 
-Get service endpoints:
-```bash
-kubectl get ingress -A
+Add the hostname to your `/etc/hosts` on a machine that can reach the cluster:
+
+```
+192.168.1.101 gitea.local
 ```
 
-## What You Accomplished
+Open `http://gitea.local` in a browser. Default credentials are in `/opt/opencenter/secrets/gitea-admin.txt` on the bastion.
 
-You just:
-- Built an air-gap package in Zone A
-- Transferred it through Zone B
-- Deployed a cluster in Zone C without internet
-- Verified all services are running
+## Check Your Work
 
-## What Happened Behind the Scenes
+Run these checks:
 
-**Zone A (Build)**
-- Downloaded K8s binaries, images, packages
-- Packaged everything into single artifact
-- Generated SBOM for compliance
+```bash
+# All nodes ready
+kubectl get nodes | grep -c Ready
+# Should output: 3
 
-**Zone B (Transfer)**
-- Moved package via secure media
-- No network connectivity required
+# Core pods running
+kubectl get pods -n kube-system | grep -c Running
+# Should be > 10
 
-**Zone C (Deploy)**
-- Bastion served as local registry and repo
-- Kubespray pulled everything from bastion
-- FluxCD deployed core services from internal Git
+# FluxCD reconciling
+kubectl get kustomizations -n flux-system
+# Should show "Applied" status
+
+# Registry accessible from nodes
+ssh node1 "curl -s http://bastion-ip:5000/v2/_catalog | jq '.repositories | length'"
+# Should output a number > 50
+```
+
+## What You Learned
+
+- How to build a Zarf package with all Kubernetes dependencies
+- How to transfer and deploy in an air-gapped environment
+- How the bastion serves as a local registry and package repository
+- How to verify cluster health after deployment
 
 ## Next Steps
 
-Try these:
-
-**Deploy an application**
-```bash
-kubectl create deployment nginx --image=nginx:1.25
-kubectl expose deployment nginx --port=80
-```
-
-**Check monitoring**
-```bash
-kubectl port-forward -n monitoring svc/grafana 3000:80
-# Open http://localhost:3000
-```
-
-**Explore GitOps**
-```bash
-kubectl get gitrepositories -n flux-system
-kubectl get kustomizations -n flux-system
-```
+- Add a custom Helm chart: [Custom Component Tutorial](02-custom-component.md)
+- Deploy to OpenStack VMs: [OpenStack Deployment Tutorial](03-openstack-deployment.md)
+- Explore component manifest options: [Component Manifest Reference](../reference/component-manifest-schema.md)
+- Understand the architecture: [Architecture Overview](../explanation/architecture/architecture-overview.md)
 
 ## Troubleshooting
 
-**Build fails with "Python 3.12+ required"**
+**Build fails with "connection timeout"**: Check firewall rules. See [Firewall Whitelist](../reference/firewall-whitelist.md).
 
-Install Python 3.12:
-```bash
-sudo apt update
-sudo apt install python3.12 python3.12-venv
-```
+**Zarf deploy fails with "disk space"**: Bastion needs 100GB free. Check with `df -h /opt`.
 
-**Deploy fails with "SSH connection refused"**
+**Ansible fails with "unreachable host"**: Verify SSH keys are set up. Test with `ssh node1` from bastion.
 
-Check SSH access:
-```bash
-ssh deployer@target-node hostname
-```
+**Pods stuck in ImagePullBackOff**: Check registry is running on bastion: `curl http://localhost:5000/v2/_catalog`. Verify nodes can reach bastion on port 5000.
 
-Set up SSH keys if needed:
-```bash
-ssh-copy-id deployer@target-node
-```
-
-**Pods stuck in ImagePullBackOff**
-
-Check registry:
-```bash
-curl http://localhost:35000/v2/_catalog
-```
-
-If empty, re-run image loading:
-```bash
-cd /opt/opencenter/outputs
-./target-scripts/load-push-all-images.sh
-```
-
-## Learn More
-
-- [OpenStack Deployment Tutorial](02-openstack-deployment.md) - Multi-node HA cluster
-- [Architecture Overview](../explanation/architecture/architecture-overview.md) - How it all works
-- [Deployment Guide](../how-to/deploy/deploy-baremetal-cluster.md) - Production deployments
+For more issues, see [Troubleshooting Reference](../reference/troubleshooting.md).
