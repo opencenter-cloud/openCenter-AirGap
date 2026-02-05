@@ -18,15 +18,16 @@ from opencenter_build.exceptions import ScanError
 
 # Default regex patterns for container image detection
 DEFAULT_IMAGE_PATTERNS = [
+    # Full image with digest: registry/repo:tag@sha256:hash
+    r"(?:image|Image|IMAGE):\s*['\"]?([a-zA-Z0-9._-]+(?:[:/][a-zA-Z0-9._/-]+)+:[a-zA-Z0-9._-]+@sha256:[a-f0-9]+)['\"]?",
     # Full image references: registry/repo:tag or registry/namespace/repo:tag
     r"(?:image|Image|IMAGE):\s*['\"]?([a-zA-Z0-9._-]+(?:[:/][a-zA-Z0-9._/-]+)+:[a-zA-Z0-9._-]+)['\"]?",
     # Docker Hub shorthand: namespace/image:tag
     r"(?:image|Image|IMAGE):\s*['\"]?([a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+:[a-zA-Z0-9._-]+)['\"]?",
     # Simple image:tag format (e.g., nginx:latest)
     r"(?:image|Image|IMAGE):\s+([a-zA-Z0-9._-]+:[a-zA-Z0-9._-]+)",
-    # Helm values repository and tag (separate fields)
+    # Helm values repository (full path only, not bare tags)
     r"repository:\s*['\"]?([a-zA-Z0-9._-]+(?:[:/][a-zA-Z0-9._/-]+)+)['\"]?",
-    r"tag:\s*['\"]?([a-zA-Z0-9._-]+)['\"]?",
 ]
 
 # File extensions to scan
@@ -72,7 +73,7 @@ def _scan_file(file_path: Path, patterns: tuple[str, ...]) -> set[str]:
         patterns: Tuple of regex pattern strings
 
     Returns:
-        Set of discovered image references
+        Set of discovered image references (validated)
     """
     compiled_patterns = _compile_patterns(patterns)
     images: set[str] = set()
@@ -91,7 +92,10 @@ def _scan_file(file_path: Path, patterns: tuple[str, ...]) -> set[str]:
         # Apply all patterns
         for pattern in compiled_patterns:
             matches = pattern.findall(content)
-            images.update(matches)
+            # Filter out invalid matches (bare tags, None, etc.)
+            for match in matches:
+                if match and _is_valid_image_reference(match):
+                    images.add(match)
 
     except (OSError, IOError) as exc:
         # Log but don't fail on individual file errors
@@ -101,6 +105,37 @@ def _scan_file(file_path: Path, patterns: tuple[str, ...]) -> set[str]:
         pass
 
     return images
+
+
+def _is_valid_image_reference(image: str) -> bool:
+    """Validate image reference format.
+
+    Filters out bare tags, version numbers, and invalid references.
+
+    Args:
+        image: Image reference string
+
+    Returns:
+        True if valid image reference
+    """
+    if not image or image == "None":
+        return False
+
+    # Must contain at least one slash or be in image:tag format
+    if "/" not in image and ":" not in image:
+        return False
+
+    # Reject bare version numbers (no registry/repo)
+    if ":" in image and "/" not in image:
+        # Allow simple docker hub images like nginx:1.21
+        parts = image.split(":")
+        if len(parts) == 2 and parts[0] and parts[1]:
+            # Check if it looks like a valid image name (not just numbers)
+            if not parts[0].replace(".", "").replace("-", "").replace("_", "").isdigit():
+                return True
+        return False
+
+    return True
 
 
 def _decode_content(data: bytes | mmap.mmap, file_path: Path) -> str:

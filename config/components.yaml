@@ -256,6 +256,8 @@ images:
   - velero/velero-plugin-for-aws:v1.12.2
   - velero/velero-restore-helper:v1.10.2
   - zalando/postgres-operator
+  - quay.io/cilium/cilium:v1.13.0@sha256:6544a3441b086a2e09005d3e21d1a4afb216fae19c5a60b35793c8a9438f8f68
+  - quay.io/cilium/operator-generic:v1.13.0@sha256:4b58d5b33e53378355f6e8ceb525ccf938b7b6f5384b35373f1f46787467ebf5
 charts:
 - name: cert-manager
   repo: https://charts.jetstack.io
