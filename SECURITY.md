@@ -162,5 +162,5 @@ For security-related questions that are not vulnerability reports, email securit
 
 ---
 
-**Last Updated**: 2026-02-01
-**Version**: 1.0.0-rc1
+**Last Updated**: 2026-02-05
+**Version**: 1.0.0-rc2
