@@ -922,22 +922,35 @@ def build(
             """Collect kubespray-offline assets."""
             console.print("  [cyan]Collecting kubespray-offline assets...[/cyan]")
 
-            # Check if kubespray-offline exists
+            # Check if kubespray-offline exists (should be cloned in scan_repositories)
             kubespray_dir = Path("build/kubespray-offline")
             if not kubespray_dir.exists():
                 console.print(
-                    f"  [yellow]⚠[/yellow] kubespray-offline not found at {kubespray_dir}"
+                    f"  [red]✗[/red] kubespray-offline not found at {kubespray_dir}"
                 )
-                console.print(
-                    f"  [cyan]Clone: git clone https://github.com/kubespray-offline/kubespray-offline.git build/kubespray-offline[/cyan]"
-                )
-                return {"assets": "", "status": "skipped", "reason": "kubespray_offline_not_found"}
+                return {"assets": "", "status": "error", "reason": "kubespray_offline_not_found"}
 
             # Check if download-all.sh exists
             download_script = kubespray_dir / "download-all.sh"
             if not download_script.exists():
-                console.print(f"  [yellow]⚠[/yellow] download-all.sh not found in {kubespray_dir}")
-                return {"assets": "", "status": "skipped", "reason": "download_script_not_found"}
+                console.print(f"  [red]✗[/red] download-all.sh not found in {kubespray_dir}")
+                return {"assets": "", "status": "error", "reason": "download_script_not_found"}
+
+            # Inject discovered images into kubespray-offline imagelists
+            all_images_file = Path("config/all-images.txt")
+            if all_images_file.exists():
+                opencenter_images_file = kubespray_dir / "imagelists" / "opencenter-images.txt"
+                opencenter_images_file.parent.mkdir(parents=True, exist_ok=True)
+
+                # Copy all-images.txt to kubespray-offline imagelists
+                images = all_images_file.read_text().splitlines()
+                # Filter out empty lines and comments
+                images = [img.strip() for img in images if img.strip() and not img.startswith("#")]
+
+                opencenter_images_file.write_text("\n".join(images) + "\n")
+                console.print(
+                    f"  [green]✓[/green] Injected {len(images)} images into kubespray-offline"
+                )
 
             # Check if outputs already exist
             outputs_dir = kubespray_dir / "outputs"
@@ -954,10 +967,10 @@ def build(
                         "count": str(file_count),
                     }
 
-            # Run download-all.sh if outputs don't exist
+            # Run download-all.sh
             console.print(f"  [cyan]Running kubespray-offline download-all.sh...[/cyan]")
             console.print(
-                f"  [yellow]⚠[/yellow] This may take 30-60 minutes depending on network speed"
+                f"  [yellow]⚠[/yellow] This may take 30-60 minutes and download 10GB+ of assets"
             )
 
             try:
