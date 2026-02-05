@@ -5,6 +5,7 @@ build pipeline execution with state management, error handling, and
 automatic checkpoint/resume functionality.
 """
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,6 +15,8 @@ from typing import Any, Callable
 from opencenter_build.config import BuildConfig
 from opencenter_build.exceptions import BuildError
 from opencenter_build.state import BuildState, StateManager, StepCheckpoint, StepStatus
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -142,6 +145,9 @@ class BuildOrchestrator:
             build_state = self._initialize_state()
         else:
             build_state = self._load_or_initialize_state()
+
+        # Configure build-specific log file
+        self._setup_build_logging(build_state.build_id)
 
         # Find resume point
         start_index = 0
@@ -337,6 +343,37 @@ class BuildOrchestrator:
                 logger.info(f"Rolled back artifacts for step: {step_name}")
             except Exception as exc:
                 logger.warning(f"Rollback failed for step {step_name}: {exc}")
+
+    def _setup_build_logging(self, build_id: str) -> None:
+        """Configure file handler for build session logs.
+
+        Args:
+            build_id: Build session identifier
+        """
+        import logging as logging_module
+
+        log_dir = Path("logs")
+        log_dir.mkdir(exist_ok=True)
+
+        log_file = log_dir / f"{build_id}.log"
+
+        # Create file handler
+        file_handler = logging_module.FileHandler(log_file, mode="a", encoding="utf-8")
+        file_handler.setLevel(logging_module.DEBUG)
+
+        # Format: timestamp - level - module - message
+        formatter = logging_module.Formatter(
+            "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        file_handler.setFormatter(formatter)
+
+        # Add handler to root logger (captures all module logs)
+        root_logger = logging_module.getLogger()
+        root_logger.addHandler(file_handler)
+
+        logger.info(f"Build session started: {build_id}")
+        logger.info(f"Logging to: {log_file}")
 
     def _cleanup_file(self, file_path: Path) -> None:
         """Remove file if it exists.
