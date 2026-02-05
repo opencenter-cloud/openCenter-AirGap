@@ -330,6 +330,9 @@ def scan(
     from opencenter_build.scanner import RepositoryScanner
 
     try:
+        # Determine repositories to scan
+        repos_to_scan: list[Path] = []
+
         # Clone repositories from versions.env if requested
         if clone_repos:
             versions_env = Path("config/versions.env")
@@ -355,11 +358,13 @@ def scan(
                 console.print("[yellow]⚠[/yellow] No repositories found in versions.env")
             else:
                 console.print(f"[cyan]Cloning {len(repos_to_clone)} repositories...[/cyan]")
+                cloned_repos = []
                 for repo_spec in repos_to_clone:
-                    clone_repository(repo_spec)
+                    repo_path = clone_repository(repo_spec)
+                    cloned_repos.append(repo_path)
 
-        # Determine repositories to scan
-        repos_to_scan: list[Path] = []
+                # Auto-add cloned repos to scan list
+                repos_to_scan.extend(cloned_repos)
 
         if discover_images:
             # Load component manifest and extract repository paths
@@ -1992,7 +1997,7 @@ def keygen(
                 "- Store in secure location (e.g., password manager)\n"
                 "- Backup securely\n\n"
                 "To sign packages:\n"
-                f"  export COSIGN_PASSWORD='your-password'\n"
+                f"  export COSIGN_PASSWORD='your-password'  # pragma: allowlist secret\n"
                 f"  cosign sign-blob --key {private_key} <package>",
                 title="Success",
                 border_style="green",

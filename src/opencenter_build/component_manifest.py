@@ -490,9 +490,12 @@ def create_default_manifest(
         )
 
     if "OPENCENTER_GITOPS_BASE_REPO" in versions:
+        # Extract repository name from URL to preserve case sensitivity
+        url = versions["OPENCENTER_GITOPS_BASE_REPO"]
+        repo_name = url.rstrip("/").split("/")[-1].replace(".git", "")
         manifest.add_repository(
-            name="opencenter-gitops-base",
-            url=versions["OPENCENTER_GITOPS_BASE_REPO"],
+            name=repo_name,
+            url=url,
             ref=versions.get("OPENCENTER_GITOPS_BASE_VERSION", "main"),
         )
 
@@ -750,10 +753,13 @@ def extract_repos_from_versions(versions: dict[str, str]) -> list[RepoSpec]:
 
     # openCenter GitOps Base repository
     if "OPENCENTER_GITOPS_BASE_REPO" in versions:
+        # Extract repository name from URL to preserve case sensitivity
+        url = versions["OPENCENTER_GITOPS_BASE_REPO"]
+        repo_name = url.rstrip("/").split("/")[-1].replace(".git", "")
         repos.append(
             RepoSpec(
-                name="opencenter-gitops-base",
-                url=versions["OPENCENTER_GITOPS_BASE_REPO"],
+                name=repo_name,
+                url=url,
                 ref=versions.get("OPENCENTER_GITOPS_BASE_VERSION", "main"),
             )
         )
