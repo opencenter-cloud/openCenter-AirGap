@@ -326,8 +326,15 @@ def scan(
         Discover from component manifest:
             opencenter-airgap scan --discover-images
     """
+    import logging
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
     from opencenter_build.scanner import RepositoryScanner
+
+    # Configure logging
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
+    else:
+        logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
 
     try:
         # Determine repositories to scan

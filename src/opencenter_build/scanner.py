@@ -8,6 +8,7 @@ This module provides concurrent repository scanning to discover:
 Uses ProcessPoolExecutor for parallel processing and memory-mapped I/O for large files.
 """
 
+import logging
 import mmap
 import multiprocessing
 import re
@@ -19,6 +20,8 @@ from pathlib import Path
 from typing import Pattern
 
 from opencenter_build.exceptions import ScanError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -656,14 +659,36 @@ class HelmChartImageExtractor:
             Set of discovered container image references
         """
         all_images = set()
+        success_count = 0
+        failure_count = 0
 
         for release in releases:
             try:
                 images = self._extract_images_from_release(release, helm_repos)
-                all_images.update(images)
-            except Exception:
-                # Skip releases that fail to process
+                if images:
+                    all_images.update(images)
+                    success_count += 1
+                    logger.debug(
+                        f"Extracted {len(images)} images from {release.chart} "
+                        f"(source: {release.source_ref})"
+                    )
+                else:
+                    failure_count += 1
+                    logger.debug(
+                        f"No images found in {release.chart} (source: {release.source_ref})"
+                    )
+            except Exception as exc:
+                failure_count += 1
+                logger.warning(
+                    f"Failed to extract images from {release.chart} "
+                    f"(source: {release.source_ref}): {exc}"
+                )
                 continue
+
+        logger.info(
+            f"Helm chart extraction: {success_count} succeeded, {failure_count} failed, "
+            f"{len(all_images)} total images"
+        )
 
         return all_images
 
@@ -684,11 +709,16 @@ class HelmChartImageExtractor:
         # Resolve chart URL
         chart_url = GitOpsScanner.resolve_helm_chart_url(release, helm_repos)
         if not chart_url:
+            logger.warning(
+                f"Cannot resolve chart URL for {release.chart}: "
+                f"repository '{release.source_ref}' not found"
+            )
             return set()
 
         # Download chart
         chart_path = self._download_chart(chart_url, release)
         if not chart_path:
+            logger.warning(f"Failed to download chart: {chart_url}")
             return set()
 
         # Extract images from chart
@@ -720,7 +750,10 @@ class HelmChartImageExtractor:
 
         # Check if already cached
         if chart_cache.exists() and any(chart_cache.iterdir()):
-            return chart_cache
+            logger.debug(f"Using cached chart: {chart_cache}")
+            chart_dirs = [d for d in chart_cache.iterdir() if d.is_dir()]
+            if chart_dirs:
+                return chart_dirs[0]
 
         chart_cache.mkdir(parents=True, exist_ok=True)
 
@@ -733,6 +766,8 @@ class HelmChartImageExtractor:
 
             cmd.extend(["--untar", "--untardir", str(chart_cache)])
 
+            logger.debug(f"Downloading chart: {' '.join(cmd)}")
+
             # Execute helm pull
             result = subprocess.run(
                 cmd,
@@ -742,16 +777,26 @@ class HelmChartImageExtractor:
             )
 
             if result.returncode != 0:
+                logger.warning(f"helm pull failed for {chart_url}: {result.stderr.strip()}")
                 return None
 
             # Find the extracted chart directory
             chart_dirs = [d for d in chart_cache.iterdir() if d.is_dir()]
             if chart_dirs:
+                logger.debug(f"Successfully downloaded chart to: {chart_dirs[0]}")
                 return chart_dirs[0]
 
+            logger.warning(f"No chart directory found after extraction: {chart_cache}")
             return None
 
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        except subprocess.TimeoutExpired:
+            logger.error(f"Timeout downloading chart: {chart_url}")
+            return None
+        except FileNotFoundError:
+            logger.error("helm command not found. Please install Helm CLI.")
+            return None
+        except Exception as exc:
+            logger.error(f"Unexpected error downloading {chart_url}: {exc}")
             return None
 
     def _scan_chart_for_images(self, chart_path: Path) -> set[str]:
