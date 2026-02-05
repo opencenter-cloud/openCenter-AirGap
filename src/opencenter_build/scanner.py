@@ -1,19 +1,41 @@
-"""Repository scanner for container image discovery.
+"""Repository scanner for container image and GitOps resource discovery.
 
-This module provides concurrent repository scanning to discover container
-images in Git repositories. Uses ProcessPoolExecutor for parallel processing
-and memory-mapped I/O for large files.
+This module provides concurrent repository scanning to discover:
+- Container images from YAML/JSON manifests
+- Helm charts from HelmRelease resources
+- Helm repositories from HelmRepository resources
+
+Uses ProcessPoolExecutor for parallel processing and memory-mapped I/O for large files.
 """
 
 import mmap
 import multiprocessing
 import re
+import yaml
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Pattern
 
 from opencenter_build.exceptions import ScanError
+
+
+@dataclass
+class HelmRepositorySpec:
+    """Helm repository specification from HelmRepository resource."""
+
+    name: str
+    url: str
+
+
+@dataclass
+class HelmReleaseSpec:
+    """Helm release specification from HelmRelease resource."""
+
+    chart: str
+    source_ref: str
+    version: str | None = None
 
 
 # Default regex patterns for container image detection
@@ -319,3 +341,283 @@ class RepositoryScanner:
         """
         _, images = _scan_repo_worker(repo, self.patterns)
         return images
+
+
+class GitOpsScanner:
+    """Scanner for GitOps resources (HelmRepository and HelmRelease).
+
+    Discovers Helm repositories and releases from FluxCD manifests.
+    Builds a mapping of Helm repository names to URLs for chart resolution.
+    """
+
+    def __init__(self, repos: list[Path]):
+        """Initialize GitOps scanner.
+
+        Args:
+            repos: List of repository paths to scan
+        """
+        self.repos = repos
+        self.helm_repos: dict[str, str] = {}  # name -> url mapping
+
+    def scan_all(self) -> tuple[dict[str, str], list[HelmReleaseSpec]]:
+        """Scan all repositories for GitOps resources.
+
+        Returns:
+            Tuple of (helm_repos_dict, helm_releases_list)
+            - helm_repos_dict: {name: url} mapping from HelmRepository resources
+            - helm_releases_list: List of HelmReleaseSpec from HelmRelease resources
+        """
+        helm_repos = {}
+        helm_releases = []
+
+        for repo in self.repos:
+            if not repo.exists():
+                continue
+
+            # Scan for HelmRepository resources
+            repo_specs = self._scan_helm_repositories(repo)
+            helm_repos.update(repo_specs)
+
+            # Scan for HelmRelease resources
+            release_specs = self._scan_helm_releases(repo)
+            helm_releases.extend(release_specs)
+
+        return helm_repos, helm_releases
+
+    def _scan_helm_repositories(self, repo_path: Path) -> dict[str, str]:
+        """Scan repository for HelmRepository resources.
+
+        Finds YAML files with 'kind: HelmRepository' and extracts:
+        - metadata.name
+        - spec.url
+
+        Args:
+            repo_path: Path to repository
+
+        Returns:
+            Dictionary mapping repository name to URL
+        """
+        helm_repos = {}
+
+        for yaml_file in repo_path.rglob("*.yaml"):
+            if not yaml_file.is_file():
+                continue
+
+            try:
+                with open(yaml_file) as f:
+                    content = f.read()
+
+                # Quick check before parsing
+                if "kind: HelmRepository" not in content:
+                    continue
+
+                # Parse YAML (may contain multiple documents)
+                for doc in yaml.safe_load_all(content):
+                    if not doc or doc.get("kind") != "HelmRepository":
+                        continue
+
+                    name = doc.get("metadata", {}).get("name")
+                    url = doc.get("spec", {}).get("url")
+
+                    if name and url:
+                        helm_repos[name] = url
+
+            except (yaml.YAMLError, OSError, IOError):
+                # Skip files that fail to parse
+                continue
+
+        # Also check .yml extension
+        for yaml_file in repo_path.rglob("*.yml"):
+            if not yaml_file.is_file():
+                continue
+
+            try:
+                with open(yaml_file) as f:
+                    content = f.read()
+
+                if "kind: HelmRepository" not in content:
+                    continue
+
+                for doc in yaml.safe_load_all(content):
+                    if not doc or doc.get("kind") != "HelmRepository":
+                        continue
+
+                    name = doc.get("metadata", {}).get("name")
+                    url = doc.get("spec", {}).get("url")
+
+                    if name and url:
+                        helm_repos[name] = url
+
+            except (yaml.YAMLError, OSError, IOError):
+                continue
+
+        return helm_repos
+
+    def _scan_helm_releases(self, repo_path: Path) -> list[HelmReleaseSpec]:
+        """Scan repository for HelmRelease resources.
+
+        Finds YAML files with 'kind: HelmRelease' and extracts:
+        - spec.chart.spec.chart (chart name)
+        - spec.chart.spec.sourceRef.name (repository reference)
+        - spec.chart.spec.version (optional version)
+
+        Args:
+            repo_path: Path to repository
+
+        Returns:
+            List of HelmReleaseSpec objects
+        """
+        helm_releases = []
+
+        for yaml_file in repo_path.rglob("*.yaml"):
+            if not yaml_file.is_file():
+                continue
+
+            try:
+                with open(yaml_file) as f:
+                    content = f.read()
+
+                # Quick check before parsing
+                if "kind: HelmRelease" not in content:
+                    continue
+
+                # Parse YAML (may contain multiple documents)
+                for doc in yaml.safe_load_all(content):
+                    if not doc or doc.get("kind") != "HelmRelease":
+                        continue
+
+                    chart_spec = doc.get("spec", {}).get("chart", {}).get("spec", {})
+
+                    chart = chart_spec.get("chart")
+                    source_ref = chart_spec.get("sourceRef", {}).get("name")
+                    version = chart_spec.get("version")
+
+                    if chart and source_ref:
+                        helm_releases.append(
+                            HelmReleaseSpec(
+                                chart=chart,
+                                source_ref=source_ref,
+                                version=version,
+                            )
+                        )
+
+            except (yaml.YAMLError, OSError, IOError):
+                # Skip files that fail to parse
+                continue
+
+        # Also check .yml extension
+        for yaml_file in repo_path.rglob("*.yml"):
+            if not yaml_file.is_file():
+                continue
+
+            try:
+                with open(yaml_file) as f:
+                    content = f.read()
+
+                if "kind: HelmRelease" not in content:
+                    continue
+
+                for doc in yaml.safe_load_all(content):
+                    if not doc or doc.get("kind") != "HelmRelease":
+                        continue
+
+                    chart_spec = doc.get("spec", {}).get("chart", {}).get("spec", {})
+
+                    chart = chart_spec.get("chart")
+                    source_ref = chart_spec.get("sourceRef", {}).get("name")
+                    version = chart_spec.get("version")
+
+                    if chart and source_ref:
+                        helm_releases.append(
+                            HelmReleaseSpec(
+                                chart=chart,
+                                source_ref=source_ref,
+                                version=version,
+                            )
+                        )
+
+            except (yaml.YAMLError, OSError, IOError):
+                continue
+
+        return helm_releases
+
+    def write_helm_repos_file(self, output_path: Path) -> None:
+        """Write discovered Helm repositories to file.
+
+        Creates a text file with format:
+        name=url
+
+        Args:
+            output_path: Path to output file (e.g., config/helm-repos.txt)
+        """
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, "w") as f:
+            f.write("# Helm Repositories discovered from GitOps manifests\n")
+            f.write("# Format: name=url\n\n")
+
+            for name, url in sorted(self.helm_repos.items()):
+                f.write(f"{name}={url}\n")
+
+    @staticmethod
+    def read_helm_repos_file(input_path: Path) -> dict[str, str]:
+        """Read Helm repositories from file.
+
+        Args:
+            input_path: Path to helm-repos.txt file
+
+        Returns:
+            Dictionary mapping repository name to URL
+        """
+        helm_repos = {}
+
+        if not input_path.exists():
+            return helm_repos
+
+        with open(input_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+
+                if "=" in line:
+                    name, url = line.split("=", 1)
+                    helm_repos[name.strip()] = url.strip()
+
+        return helm_repos
+
+    @staticmethod
+    def resolve_helm_chart_url(release: HelmReleaseSpec, helm_repos: dict[str, str]) -> str | None:
+        """Resolve full Helm chart URL from HelmRelease and repository mapping.
+
+        Supports both HTTP/HTTPS and OCI registries.
+
+        Args:
+            release: HelmReleaseSpec with chart name and source reference
+            helm_repos: Dictionary mapping repository names to URLs
+
+        Returns:
+            Full chart URL (http/https/oci) or None if repository not found
+
+        Example:
+            >>> release = HelmReleaseSpec(chart="nginx", source_ref="bitnami", version="1.0.0")
+            >>> repos = {"bitnami": "https://charts.bitnami.com/bitnami"}
+            >>> url = GitOpsScanner.resolve_helm_chart_url(release, repos)
+            >>> print(url)
+            https://charts.bitnami.com/bitnami/nginx
+        """
+        repo_url = helm_repos.get(release.source_ref)
+        if not repo_url:
+            return None
+
+        # OCI registry format: oci://registry/path
+        if repo_url.startswith("oci://"):
+            # OCI format: oci://registry/path/chart:version
+            chart_url = f"{repo_url.rstrip('/')}/{release.chart}"
+            if release.version:
+                chart_url = f"{chart_url}:{release.version}"
+            return chart_url
+
+        # HTTP/HTTPS format: https://repo/path/chart-version.tgz
+        chart_url = f"{repo_url.rstrip('/')}/{release.chart}"
+        return chart_url
