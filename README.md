@@ -56,39 +56,39 @@ python3 -m opencenter_build.cli --help
 ### Build Package (Zone A - Connected)
 
 ```bash
-# Initialize build environment with component manifest
-python3 -m opencenter_build.cli init --create-manifest
+# 1. Initialize project (creates default versions.env)
+python3 -m opencenter_build.cli init
 
-# Create versions.env (required)
-cat > config/versions.env << 'EOF'
-KUBERNETES_VERSION=1.34.3
-CALICO_VERSION=3.27.0
-CONTAINERD_VERSION=2.1.5
-RUNC_VERSION=1.3.4
-EOF
+# 2. Edit versions (single source of truth)
+vim config/versions.env
 
-# Optional: Customize components
-# Edit config/components.yaml to add/remove images, charts, repos, tools
-
-# Optional: Scan repositories for images (if repos configured in manifest)
-python3 -m opencenter_build.cli scan --discover-images
-
-# Build package (generates manifest and Zarf config)
+# 3. Build (auto-generates components.yaml from versions.env)
 python3 -m opencenter_build.cli build
 
-# Check build status
-python3 -m opencenter_build.cli status
+# 4. Optional: Auto-discover images/charts from repos
+python3 -m opencenter_build.cli scan --repos
+```
 
-# Verify generated artifacts
-ls -lh dist/
+The `build` command automatically generates `components.yaml` from `versions.env`. If `versions.env` is updated, the next build regenerates the manifest while preserving any manual additions.
+
+**Optional Customization:**
+```bash
+# Add custom components after initial build
+python3 -m opencenter_build.cli add image custom-registry.io/app:v1.0
+python3 -m opencenter_build.cli add tool --name mytool --version v1.0 --url <url>
+
+# Rebuild preserves custom additions
+python3 -m opencenter_build.cli build
+
+# Force clean regeneration (loses manual edits)
+python3 -m opencenter_build.cli build --force-regenerate
 ```
 
 **Current Limitations:**
 - Full build requires kubespray-offline integration (in progress)
 - Zarf package creation requires Zarf CLI installed
-- Component manifest auto-discovery under development
 
-Output: `dist/artifact-manifest.json`, `zarf.yaml` (Zarf package creation requires `zarf package create`)
+Output: `config/components.yaml` (auto-generated), `zarf.yaml`, `dist/artifact-manifest.json`
 
 ### Transfer (Zone B - Airlock)
 
@@ -129,20 +129,20 @@ Full navigation: [Documentation Taxonomy](docs/taxonomy.md)
 ## CLI Commands
 
 ```bash
-# Initialize new build environment
-python3 -m opencenter_build.cli init [--create-manifest] [--template baremetal|openstack]
+# Initialize new build environment (creates default versions.env)
+python3 -m opencenter_build.cli init [--template baremetal|openstack]
 
-# Add components to manifest
+# Add components to manifest (for customization)
 python3 -m opencenter_build.cli add tool --name kubectl --version v1.34.3 --url <url>
 python3 -m opencenter_build.cli add image registry.k8s.io/kube-apiserver:v1.34.3
 python3 -m opencenter_build.cli add repo https://github.com/kubernetes-sigs/kubespray.git
 
-# Scan repositories for images
-python3 -m opencenter_build.cli scan --discover-images
-python3 -m opencenter_build.cli scan --repo build/kubespray --repo build/genestack
+# Scan repositories for images and charts
+python3 -m opencenter_build.cli scan --repos              # Clone repos from versions.env and scan
+python3 -m opencenter_build.cli scan --repo build/kubespray  # Scan specific directory
 
-# Build package
-python3 -m opencenter_build.cli build [--clean] [--resume]
+# Build package (auto-generates components.yaml from versions.env)
+python3 -m opencenter_build.cli build [--clean] [--resume] [--force-regenerate]
 
 # Check build status
 python3 -m opencenter_build.cli status

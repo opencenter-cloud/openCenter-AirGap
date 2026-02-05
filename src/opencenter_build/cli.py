@@ -30,9 +30,6 @@ app = typer.Typer(
 
 @app.command()
 def init(
-    create_manifest: bool = typer.Option(
-        False, "--create-manifest", help="Create component manifest from template"
-    ),
     template: str = typer.Option("baremetal", "--template", help="Template: baremetal, openstack"),
     config_file: Path = typer.Option(
         Path("config/versions.env"), "--config", help="Configuration file path"
@@ -40,14 +37,16 @@ def init(
 ) -> None:
     """Initialize project configuration.
 
-    Creates necessary directory structure and optionally generates a component
-    manifest from a template. Validates existing configuration if present.
-    """
-    from opencenter_build.component_manifest import (
-        create_default_manifest,
-        write_manifest,
-    )
+    Creates directory structure and default versions.env file.
+    User should edit versions.env before running build.
 
+    Examples:
+        Initialize with baremetal template:
+            opencenter-airgap init
+
+        Initialize with OpenStack template:
+            opencenter-airgap init --template openstack
+    """
     try:
         # Create directory structure
         directories = [
@@ -62,37 +61,30 @@ def init(
             directory.mkdir(parents=True, exist_ok=True)
             console.print(f"[green]✓[/green] Created directory: {directory}")
 
-        # Validate config file if it exists
+        # Create default versions.env if it doesn't exist
         if config_file.exists():
-            try:
-                versions = parse_versions_env(config_file)
-                console.print(f"[green]✓[/green] Validated configuration: {config_file}")
-                console.print(f"  Found {len(versions)} version variables")
-            except ConfigError as exc:
-                console.print(f"[yellow]⚠[/yellow] Configuration validation warning: {exc}")
-        else:
-            console.print(f"[yellow]⚠[/yellow] Configuration file not found: {config_file}")
-            console.print(f"  Create {config_file} with version variables")
-
-        # Create component manifest if requested
-        if create_manifest:
-            manifest_path = Path("config/components.yaml")
-
-            if manifest_path.exists():
+            console.print(f"[yellow]⚠[/yellow] Configuration already exists: {config_file}")
+            overwrite = typer.confirm("Overwrite existing configuration?")
+            if not overwrite:
+                console.print("[yellow]Skipped configuration creation[/yellow]")
+                console.print()
                 console.print(
-                    f"[yellow]⚠[/yellow] Component manifest already exists: {manifest_path}"
+                    Panel.fit(
+                        "[bold green]Initialization complete![/bold green]\n\n"
+                        "Next steps:\n"
+                        "1. Edit config/versions.env with component versions\n"
+                        "2. Run 'opencenter-airgap build' to create package\n"
+                        "3. Optional: Run 'opencenter-airgap scan --repos' to discover images/charts",
+                        title="Success",
+                        border_style="green",
+                    )
                 )
-                overwrite = typer.confirm("Overwrite existing manifest?")
-                if not overwrite:
-                    console.print("[yellow]Skipped manifest creation[/yellow]")
-                    return
+                return
 
-            # Create manifest from template
-            manifest = create_default_manifest(template=template)
-            write_manifest(manifest, manifest_path)
-
-            console.print(f"[green]✓[/green] Created component manifest: {manifest_path}")
-            console.print(f"  Template: {template}")
+        # Create default versions.env
+        _create_default_versions_env(config_file, template)
+        console.print(f"[green]✓[/green] Created configuration: {config_file}")
+        console.print(f"  Template: {template}")
 
         # Display success summary
         console.print()
@@ -101,9 +93,8 @@ def init(
                 "[bold green]Initialization complete![/bold green]\n\n"
                 "Next steps:\n"
                 "1. Edit config/versions.env with component versions\n"
-                "2. Edit config/components.yaml to add tools and repositories\n"
-                "3. Run 'opencenter-airgap validate' to check configuration\n"
-                "4. Run 'opencenter-airgap scan' to discover images",
+                "2. Run 'opencenter-airgap build' to create package\n"
+                "3. Optional: Run 'opencenter-airgap scan --repos' to discover images/charts",
                 title="Success",
                 border_style="green",
             )
@@ -112,6 +103,89 @@ def init(
     except Exception as exc:
         console.print(f"[bold red]Error:[/bold red] {exc}")
         raise typer.Exit(code=1)
+
+
+def _create_default_versions_env(path: Path, template: str) -> None:
+    """Create default versions.env file.
+
+    Args:
+        path: Path to versions.env file
+        template: Template name (baremetal or openstack)
+    """
+    content = """# openCenter AirGap Version Configuration
+# Edit this file to specify component versions for your deployment
+
+# Kubespray and Kubernetes versions
+KUBESPRAY_VERSION="master"
+KUBESPRAY_COMMIT_SHA="HEAD"
+KUBERNETES_VERSION="v1.34.3"
+
+# Target OS
+UBUNTU_VERSION="24.04"
+
+# Container runtime and CNI
+CONTAINER_RUNTIME="containerd"
+CONTAINERD_VERSION="2.1.5"
+RUNC_VERSION="1.3.4"
+CNI_VERSION="1.8.0"
+CNI_PLUGIN="calico"
+CALICO_VERSION="v3.31.3"
+
+# Terraform version
+TERRAFORM_VERSION="1.14.0"
+
+# Core Services Versions
+FLUXCD_VERSION="v2.7.5"
+GITEA_VERSION="v1.25.4"
+CERT_MANAGER_VERSION="v1.16.2"
+INGRESS_NGINX_VERSION="v1.9.0"
+KEYCLOAK_VERSION="26.0.7"
+PROMETHEUS_VERSION="v3.0.1"
+GRAFANA_VERSION="11.4.0"
+
+# openCenter GitOps
+OPENCENTER_GITOPS_BASE_REPO="https://github.com/rackerlabs/openCenter-gitops-base"
+OPENCENTER_GITOPS_BASE_VERSION="main"
+OPENCENTER_GITOPS_BASE_COMMIT_SHA="HEAD"
+
+# openCenter Container Registry
+OPENCENTER_CONTAINER_REGISTRY="ghcr.io/opencenter-cloud"
+
+# Operator Tools
+K9S_VERSION="v0.50.9"
+HELM_VERSION="v4.0.5"
+STERN_VERSION="v1.33.1"
+KUBECTX_VERSION="v0.9.5"
+KUBECTL_VERSION="v1.34.3"
+
+# Additional CLI Tools
+YQ_VERSION="v4.47.2"
+JQ_VERSION="1.8.1"
+
+# Terraform Providers
+OPENSTACK_PROVIDER_VERSION="2.1.0"
+LOCAL_PROVIDER_VERSION="2.5.2"
+NULL_PROVIDER_VERSION="3.2.3"
+RANDOM_PROVIDER_VERSION="3.6.3"
+TLS_PROVIDER_VERSION="4.0.6"
+
+# Container Images
+REGISTRY_VERSION="2.8.3"
+NGINX_VERSION="1.27.3"
+
+# Architecture
+TARGET_ARCH="amd64"
+PYTHON_VERSION="3.12"
+"""
+
+    if template == "openstack":
+        content += """
+# OpenStack-specific configuration
+TERRAFORM_OPENSTACK_ENABLED="true"
+"""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
 
 
 @app.command()
@@ -222,6 +296,9 @@ def scan(
     repos: Optional[list[Path]] = typer.Option(
         None, "--repo", help="Repository paths to scan (can be specified multiple times)"
     ),
+    clone_repos: bool = typer.Option(
+        False, "--repos", help="Clone repositories from versions.env before scanning"
+    ),
     discover_images: bool = typer.Option(
         False, "--discover-images", help="Discover images from component manifest repositories"
     ),
@@ -233,14 +310,18 @@ def scan(
     ),
     verbose: bool = typer.Option(False, "--verbose", help="Enable verbose output"),
 ) -> None:
-    """Scan repositories for container images.
+    """Scan repositories for container images and Helm charts.
 
-    Discovers container images in Git repositories using concurrent scanning.
-    Can scan explicit repository paths or auto-discover from component manifest.
+    Discovers container images and Helm charts in Git repositories using concurrent scanning.
+    Can scan explicit repository paths, auto-discover from component manifest, or clone
+    repositories from versions.env.
 
     Examples:
         Scan specific repositories:
             opencenter-airgap scan --repo kubespray --repo opencenter-gitops-base
+
+        Clone repos from versions.env and scan:
+            opencenter-airgap scan --repos
 
         Discover from component manifest:
             opencenter-airgap scan --discover-images
@@ -249,6 +330,34 @@ def scan(
     from opencenter_build.scanner import RepositoryScanner
 
     try:
+        # Clone repositories from versions.env if requested
+        if clone_repos:
+            versions_env = Path("config/versions.env")
+            if not versions_env.exists():
+                console.print(
+                    f"[bold red]Error:[/bold red] Configuration not found: {versions_env}"
+                )
+                console.print("Run 'opencenter-airgap init' to create config/versions.env")
+                raise typer.Exit(code=1)
+
+            console.print("[cyan]Loading versions.env...[/cyan]")
+            versions = parse_versions_env(versions_env)
+
+            console.print("[cyan]Extracting repository specifications...[/cyan]")
+            from opencenter_build.component_manifest import (
+                extract_repos_from_versions,
+                clone_repository,
+            )
+
+            repos_to_clone = extract_repos_from_versions(versions)
+
+            if not repos_to_clone:
+                console.print("[yellow]⚠[/yellow] No repositories found in versions.env")
+            else:
+                console.print(f"[cyan]Cloning {len(repos_to_clone)} repositories...[/cyan]")
+                for repo_spec in repos_to_clone:
+                    clone_repository(repo_spec)
+
         # Determine repositories to scan
         repos_to_scan: list[Path] = []
 
@@ -326,14 +435,79 @@ def scan(
                 if verbose:
                     console.print(f"  {repo_path}: {len(images)} images")
 
+        # Scan for Helm charts
+        console.print("[cyan]Scanning for Helm charts...[/cyan]")
+        from opencenter_build.component_manifest import HelmChartScanner
+
+        chart_scanner = HelmChartScanner(repos=valid_repos)
+        discovered_charts = chart_scanner.scan_all()
+
+        if verbose:
+            console.print(f"[cyan]Found {len(discovered_charts)} Helm charts[/cyan]")
+            for chart in discovered_charts:
+                console.print(f"  - {chart.name} v{chart.version} ({chart.path})")
+
+        # Update component manifest with discoveries
+        console.print("[cyan]Updating component manifest...[/cyan]")
+        from opencenter_build.component_manifest import (
+            read_manifest,
+            write_manifest,
+            ComponentManifest,
+        )
+
+        manifest_path = Path("config/components.yaml")
+
+        # Load or create manifest
+        if manifest_path.exists():
+            manifest = read_manifest(manifest_path)
+        else:
+            manifest = ComponentManifest()
+
+        # Track what was added
+        added_images = 0
+        added_charts = 0
+
+        # Add discovered images to images.additional (avoid duplicates)
+        existing_images = set(manifest.images.additional)
+        for image in sorted(all_images):
+            if image not in existing_images:
+                manifest.images.additional.append(image)
+                added_images += 1
+
+        # Add discovered charts (avoid duplicates by name)
+        existing_chart_names = {c.name for c in manifest.charts}
+        for chart in discovered_charts:
+            if chart.name not in existing_chart_names:
+                manifest.charts.append(chart)
+                added_charts += 1
+                existing_chart_names.add(chart.name)
+
+        # Write updated manifest
+        write_manifest(manifest, manifest_path)
+
+        console.print(f"[green]✓[/green] Added {added_images} new images to manifest")
+        console.print(f"[green]✓[/green] Added {added_charts} new charts to manifest")
+
         # Write results
         output.parent.mkdir(parents=True, exist_ok=True)
         sorted_images = sorted(all_images)
         output.write_text("\n".join(sorted_images) + "\n")
 
+        # Display summary
         console.print()
-        console.print(f"[green]✓[/green] Discovered {len(all_images)} unique images")
-        console.print(f"[green]✓[/green] Wrote results to: {output}")
+        console.print("[bold green]Scan Summary[/bold green]")
+        console.print(f"  Repositories scanned: {len(valid_repos)}")
+        if clone_repos:
+            console.print(
+                f"  Repositories cloned: {len(repos_to_clone) if 'repos_to_clone' in locals() else 0}"
+            )
+        console.print(f"  Images discovered: {len(all_images)}")
+        console.print(f"  Charts discovered: {len(discovered_charts)}")
+        console.print(f"  Images added to manifest: {added_images}")
+        console.print(f"  Charts added to manifest: {added_charts}")
+        console.print()
+        console.print(f"[green]✓[/green] Results written to: {output}")
+        console.print(f"[green]✓[/green] Manifest updated: {manifest_path}")
 
         if verbose:
             console.print("\nTop 10 images:")
@@ -460,6 +634,9 @@ def generate_manifest(
 def build(
     clean: bool = typer.Option(False, "--clean", help="Clean build (ignore checkpoints)"),
     resume: bool = typer.Option(True, "--resume/--no-resume", help="Resume from checkpoint"),
+    force_regenerate: bool = typer.Option(
+        False, "--force-regenerate", help="Force regeneration of components.yaml"
+    ),
     config_file: Path = typer.Option(
         Path("config/versions.env"), "--config", help="Configuration file path"
     ),
@@ -477,6 +654,9 @@ def build(
 
         Resume from checkpoint:
             opencenter-airgap build --resume
+
+        Force regenerate components.yaml:
+            opencenter-airgap build --force-regenerate
     """
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
     from rich.table import Table
@@ -485,15 +665,54 @@ def build(
     from opencenter_build.state import StateManager
 
     try:
-        # Load configuration
+        # Validate versions.env exists
         if not config_file.exists():
             console.print(f"[bold red]Error:[/bold red] Configuration not found: {config_file}")
-            console.print("Create config/versions.env with version variables")
+            console.print("Run 'opencenter-airgap init' to create config/versions.env")
             raise typer.Exit(code=1)
 
         console.print(f"[cyan]Loading configuration...[/cyan]")
         config = BuildConfig.from_env_file(config_file)
         console.print(f"[green]✓[/green] Loaded configuration")
+
+        # Auto-generate or regenerate components.yaml
+        from opencenter_build.component_manifest import (
+            should_regenerate_manifest,
+            create_default_manifest,
+            read_manifest,
+            write_manifest,
+            merge_manifests,
+        )
+
+        manifest_path = Path("config/components.yaml")
+
+        if should_regenerate_manifest(config_file, manifest_path, force=force_regenerate):
+            if force_regenerate and manifest_path.exists():
+                console.print(
+                    "[yellow]⚠ Warning:[/yellow] Force regenerating components.yaml "
+                    "(manual edits will be preserved)"
+                )
+
+            console.print("[cyan]Generating components.yaml from versions.env...[/cyan]")
+
+            # Generate new manifest from versions.env
+            generated_manifest = create_default_manifest(versions_env=config_file)
+
+            # Merge with existing if present and not forcing
+            if manifest_path.exists() and not force_regenerate:
+                existing_manifest = read_manifest(manifest_path)
+                final_manifest = merge_manifests(existing_manifest, generated_manifest)
+                console.print("[cyan]Merged with existing manual edits[/cyan]")
+            elif manifest_path.exists() and force_regenerate:
+                existing_manifest = read_manifest(manifest_path)
+                final_manifest = merge_manifests(existing_manifest, generated_manifest)
+                console.print("[cyan]Regenerated and merged manual edits[/cyan]")
+            else:
+                final_manifest = generated_manifest
+
+            # Write manifest
+            write_manifest(final_manifest, manifest_path)
+            console.print(f"[green]✓[/green] Generated components.yaml")
 
         # Initialize state manager
         state_mgr = StateManager(state_file)
@@ -1670,9 +1889,7 @@ def keygen(
     key_name: str = typer.Option(
         "signing-key", "--name", "-n", help="Key name (without extension)"
     ),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Overwrite existing keys"
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing keys"),
 ) -> None:
     """Generate Cosign signing key pair for package signing.
 

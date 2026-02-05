@@ -135,6 +135,7 @@ class ZarfGenerator:
         return [
             self._create_bootstrap_component(),
             self._create_terraform_component(),
+            self._create_repos_component(),
             self._create_kubespray_component(),
             self._create_images_component(),
             self._create_deploy_component(),
@@ -240,6 +241,36 @@ provider_installation {
 }
 """
         return f"cat > /root/.terraformrc << 'EOF'\n{terraformrc_content}\nEOF"
+
+    def _create_repos_component(self) -> dict[str, Any]:
+        """Create git-repositories component.
+
+        Reads repositories from component manifest and creates Zarf repos
+        component. Zarf will clone these during package creation.
+
+        Returns:
+            Repositories component definition
+        """
+        manifest_path = Path("config/components.yaml")
+        repos_list = []
+
+        if manifest_path.exists():
+            try:
+                from opencenter_build.component_manifest import read_manifest
+
+                manifest = read_manifest(manifest_path)
+                for repo in manifest.repositories:
+                    repos_list.append(f"{repo.url}@{repo.ref}")
+            except Exception:
+                # If manifest read fails, return empty component
+                pass
+
+        return {
+            "name": "git-repositories",
+            "description": "Git repositories for Kubespray and GitOps",
+            "required": True,
+            "repos": repos_list,
+        }
 
     def _create_kubespray_component(self) -> dict[str, Any]:
         """Create kubespray-core component.

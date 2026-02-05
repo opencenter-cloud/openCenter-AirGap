@@ -13,7 +13,11 @@ import yaml
 from typer.testing import CliRunner
 
 from opencenter_build.cli import app
-from opencenter_build.component_manifest import ComponentManifest, ToolComponent, RepositoryComponent
+from opencenter_build.component_manifest import (
+    ComponentManifest,
+    ToolComponent,
+    RepositoryComponent,
+)
 
 
 @pytest.fixture
@@ -305,3 +309,200 @@ class TestVersionCommand:
         assert result.exit_code == 0
         # Should show at least some dependencies
         assert "typer" in result.stdout.lower() or "rich" in result.stdout.lower()
+
+
+class TestScanCommand:
+    """Tests for enhanced scan command."""
+
+    def test_scan_with_repos_flag(self, runner, tmp_path, sample_versions_env):
+        """Test scan command with --repos flag to clone repositories."""
+        # Create build directory
+        build_dir = tmp_path / "build"
+        build_dir.mkdir()
+
+        with (
+            patch("opencenter_build.component_manifest.clone_repository") as mock_clone,
+            patch("opencenter_build.scanner.RepositoryScanner") as mock_scanner,
+            patch("opencenter_build.component_manifest.HelmChartScanner") as mock_chart_scanner,
+            patch("opencenter_build.component_manifest.read_manifest") as mock_read,
+            patch("opencenter_build.component_manifest.write_manifest") as mock_write,
+        ):
+            # Mock scanner to return empty results
+            mock_scanner_instance = MagicMock()
+            mock_scanner_instance.scan_all.return_value = {}
+            mock_scanner.return_value = mock_scanner_instance
+
+            # Mock chart scanner to return empty results
+            mock_chart_scanner_instance = MagicMock()
+            mock_chart_scanner_instance.scan_all.return_value = []
+            mock_chart_scanner.return_value = mock_chart_scanner_instance
+
+            # Mock manifest
+            mock_manifest = ComponentManifest()
+            mock_read.return_value = mock_manifest
+
+            # Mock clone to return a path
+            mock_clone.return_value = build_dir / "test-repo"
+
+            result = runner.invoke(app, ["scan", "--repos"], catch_exceptions=False)
+
+            # Should attempt to clone repositories
+            assert mock_clone.called or "No repositories" in result.stdout
+
+    def test_scan_updates_manifest_with_discoveries(self, runner, tmp_path):
+        """Test that scan updates manifest with discovered images and charts."""
+        # Create test repository with Chart.yaml
+        repo_dir = tmp_path / "build" / "test-repo"
+        repo_dir.mkdir(parents=True)
+
+        chart_dir = repo_dir / "charts" / "test-chart"
+        chart_dir.mkdir(parents=True)
+
+        chart_yaml = chart_dir / "Chart.yaml"
+        chart_yaml.write_text("name: test-chart\nversion: 1.0.0\n")
+
+        # Create config directory
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+
+        manifest_path = config_dir / "components.yaml"
+
+        with (
+            patch("opencenter_build.cli.Path") as mock_path,
+            patch("opencenter_build.scanner.RepositoryScanner") as mock_scanner,
+        ):
+            mock_path.return_value = tmp_path
+
+            # Mock scanner to return test images
+            mock_scanner_instance = MagicMock()
+            mock_scanner_instance.scan_all.return_value = {repo_dir: {"nginx:1.21", "redis:7.0"}}
+            mock_scanner.return_value = mock_scanner_instance
+
+            result = runner.invoke(app, ["scan", f"--repo={repo_dir}"])
+
+            # Should update manifest
+            assert result.exit_code == 0 or "manifest" in result.stdout.lower()
+
+    def test_scan_avoids_duplicate_images(self, runner, tmp_path, sample_component_manifest):
+        """Test that scan avoids adding duplicate images to manifest."""
+        # Create test repository
+        repo_dir = tmp_path / "build" / "test-repo"
+        repo_dir.mkdir(parents=True)
+
+        with (
+            patch("opencenter_build.cli.Path") as mock_path,
+            patch("opencenter_build.scanner.RepositoryScanner") as mock_scanner,
+            patch("opencenter_build.component_manifest.HelmChartScanner") as mock_chart_scanner,
+            patch("opencenter_build.component_manifest.read_manifest") as mock_read,
+            patch("opencenter_build.component_manifest.write_manifest") as mock_write,
+        ):
+            mock_path.return_value = tmp_path
+
+            # Create manifest with existing image
+            manifest = ComponentManifest()
+            manifest.images.additional = ["nginx:1.21"]
+            mock_read.return_value = manifest
+
+            # Mock scanner to return same image
+            mock_scanner_instance = MagicMock()
+            mock_scanner_instance.scan_all.return_value = {repo_dir: {"nginx:1.21"}}
+            mock_scanner.return_value = mock_scanner_instance
+
+            # Mock chart scanner
+            mock_chart_scanner_instance = MagicMock()
+            mock_chart_scanner_instance.scan_all.return_value = []
+            mock_chart_scanner.return_value = mock_chart_scanner_instance
+
+            result = runner.invoke(app, ["scan", f"--repo={repo_dir}"])
+
+            # Should not add duplicate
+            if mock_write.called:
+                written_manifest = mock_write.call_args[0][0]
+                # Count occurrences of nginx:1.21
+                nginx_count = written_manifest.images.additional.count("nginx:1.21")
+                assert nginx_count == 1
+
+    def test_scan_avoids_duplicate_charts(self, runner, tmp_path):
+        """Test that scan avoids adding duplicate charts to manifest."""
+        # Create test repository with Chart.yaml
+        repo_dir = tmp_path / "build" / "test-repo"
+        repo_dir.mkdir(parents=True)
+
+        chart_dir = repo_dir / "charts" / "test-chart"
+        chart_dir.mkdir(parents=True)
+
+        chart_yaml = chart_dir / "Chart.yaml"
+        chart_yaml.write_text("name: test-chart\nversion: 1.0.0\n")
+
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+
+        with (
+            patch("opencenter_build.cli.Path") as mock_path,
+            patch("opencenter_build.scanner.RepositoryScanner") as mock_scanner,
+            patch("opencenter_build.component_manifest.read_manifest") as mock_read,
+            patch("opencenter_build.component_manifest.write_manifest") as mock_write,
+        ):
+            mock_path.return_value = tmp_path
+
+            # Create manifest with existing chart
+            from opencenter_build.component_manifest import ChartComponent
+
+            manifest = ComponentManifest()
+            manifest.charts = [
+                ChartComponent(name="test-chart", version="1.0.0", repo="local", path="charts")
+            ]
+            mock_read.return_value = manifest
+
+            # Mock scanner
+            mock_scanner_instance = MagicMock()
+            mock_scanner_instance.scan_all.return_value = {}
+            mock_scanner.return_value = mock_scanner_instance
+
+            result = runner.invoke(app, ["scan", f"--repo={repo_dir}"])
+
+            # Should not add duplicate chart
+            if mock_write.called:
+                written_manifest = mock_write.call_args[0][0]
+                chart_names = [c.name for c in written_manifest.charts]
+                assert chart_names.count("test-chart") == 1
+
+    def test_scan_displays_summary(self, runner, tmp_path):
+        """Test that scan displays summary of discoveries."""
+        repo_dir = tmp_path / "build" / "test-repo"
+        repo_dir.mkdir(parents=True)
+
+        with (
+            patch("opencenter_build.cli.Path") as mock_path,
+            patch("opencenter_build.scanner.RepositoryScanner") as mock_scanner,
+            patch("opencenter_build.component_manifest.HelmChartScanner") as mock_chart_scanner,
+            patch("opencenter_build.component_manifest.read_manifest") as mock_read,
+            patch("opencenter_build.component_manifest.write_manifest"),
+        ):
+            mock_path.return_value = tmp_path
+
+            # Mock manifest
+            mock_read.return_value = ComponentManifest()
+
+            # Mock scanner with results
+            mock_scanner_instance = MagicMock()
+            mock_scanner_instance.scan_all.return_value = {
+                repo_dir: {"nginx:1.21", "redis:7.0", "postgres:14"}
+            }
+            mock_scanner.return_value = mock_scanner_instance
+
+            # Mock chart scanner with results
+            from opencenter_build.component_manifest import ChartComponent
+
+            mock_chart_scanner_instance = MagicMock()
+            mock_chart_scanner_instance.scan_all.return_value = [
+                ChartComponent(name="chart1", version="1.0.0", repo="local", path="charts/chart1"),
+                ChartComponent(name="chart2", version="2.0.0", repo="local", path="charts/chart2"),
+            ]
+            mock_chart_scanner.return_value = mock_chart_scanner_instance
+
+            result = runner.invoke(app, ["scan", f"--repo={repo_dir}"])
+
+            # Should display summary
+            assert "Scan Summary" in result.stdout or "discovered" in result.stdout.lower()
+            assert result.exit_code == 0

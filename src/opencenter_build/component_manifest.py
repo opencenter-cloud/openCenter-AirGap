@@ -49,6 +49,30 @@ class ToolComponent:
 
 
 @dataclass
+class RepoSpec:
+    """Repository specification for extraction from versions.env.
+
+    Attributes:
+        name: Repository name
+        url: Git clone URL
+        ref: Git ref (branch, tag, or commit)
+    """
+
+    name: str
+    url: str
+    ref: str
+
+    def __post_init__(self) -> None:
+        """Validate required fields."""
+        if not self.name:
+            raise ValueError("Repository name is required")
+        if not self.url:
+            raise ValueError("Repository URL is required")
+        if not self.ref:
+            raise ValueError("Repository ref is required")
+
+
+@dataclass
 class RepositoryComponent:
     """Git repository specification.
 
@@ -164,6 +188,7 @@ class ComponentManifest:
         os_packages: OS packages configuration
         python_packages: Python packages configuration
         terraform_providers: List of Terraform providers
+        _generated: Generation metadata (preserved on round-trip)
     """
 
     kubernetes: KubernetesComponent | None = None
@@ -172,18 +197,23 @@ class ComponentManifest:
     images: ImagesComponent = field(default_factory=ImagesComponent)
     charts: list[ChartComponent] = field(default_factory=list)
     os_packages: OSPackagesComponent = field(default_factory=OSPackagesComponent)
-    python_packages: PythonPackagesComponent = field(
-        default_factory=PythonPackagesComponent
-    )
+    python_packages: PythonPackagesComponent = field(default_factory=PythonPackagesComponent)
     terraform_providers: list[TerraformProviderComponent] = field(default_factory=list)
+    _generated: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert manifest to dictionary for YAML serialization.
+
+        Includes generation metadata if present.
 
         Returns:
             Dictionary representation
         """
         data = {}
+
+        # Include metadata if present
+        if self._generated:
+            data["_generated"] = self._generated
 
         if self.kubernetes:
             data["kubernetes"] = asdict(self.kubernetes)
@@ -197,9 +227,7 @@ class ComponentManifest:
         if self.images.auto_discover or self.images.additional:
             images_data = {}
             if self.images.auto_discover:
-                images_data["auto_discover"] = [
-                    asdict(disc) for disc in self.images.auto_discover
-                ]
+                images_data["auto_discover"] = [asdict(disc) for disc in self.images.auto_discover]
             if self.images.additional:
                 images_data["additional"] = self.images.additional
             data["images"] = images_data
@@ -224,6 +252,8 @@ class ComponentManifest:
     def from_dict(cls, data: dict[str, Any]) -> "ComponentManifest":
         """Create manifest from dictionary.
 
+        Preserves generation metadata if present.
+
         Args:
             data: Dictionary with manifest data
 
@@ -231,6 +261,10 @@ class ComponentManifest:
             ComponentManifest instance
         """
         manifest = cls()
+
+        # Preserve metadata if present
+        if "_generated" in data:
+            manifest._generated = data["_generated"]
 
         # Kubernetes
         if "kubernetes" in data:
@@ -245,22 +279,16 @@ class ComponentManifest:
 
         # Repositories
         if "repositories" in data:
-            manifest.repositories = [
-                RepositoryComponent(**repo) for repo in data["repositories"]
-            ]
+            manifest.repositories = [RepositoryComponent(**repo) for repo in data["repositories"]]
 
         # Images
         if "images" in data:
             images_data = data["images"]
             auto_discover = []
             if "auto_discover" in images_data:
-                auto_discover = [
-                    ImageDiscovery(**disc) for disc in images_data["auto_discover"]
-                ]
+                auto_discover = [ImageDiscovery(**disc) for disc in images_data["auto_discover"]]
             additional = images_data.get("additional", [])
-            manifest.images = ImagesComponent(
-                auto_discover=auto_discover, additional=additional
-            )
+            manifest.images = ImagesComponent(auto_discover=auto_discover, additional=additional)
 
         # Charts
         if "charts" in data:
@@ -277,8 +305,7 @@ class ComponentManifest:
         # Terraform providers
         if "terraform_providers" in data:
             manifest.terraform_providers = [
-                TerraformProviderComponent(**provider)
-                for provider in data["terraform_providers"]
+                TerraformProviderComponent(**provider) for provider in data["terraform_providers"]
             ]
 
         return manifest
@@ -353,20 +380,44 @@ class ComponentManifest:
         self.charts.append(chart)
 
 
-def create_default_manifest(template: str = "baremetal") -> ComponentManifest:
-    """Create default component manifest from template.
+def create_default_manifest(
+    template: str = "baremetal", versions_env: Path | None = None
+) -> ComponentManifest:
+    """Create default component manifest from versions.env.
+
+    Generates component manifest by parsing versions.env and extracting
+    component definitions. This ensures single source of truth for versions.
 
     Args:
         template: Template name ('baremetal' or 'openstack')
+        versions_env: Path to versions.env file (default: config/versions.env)
 
     Returns:
-        ComponentManifest with default components
+        ComponentManifest with components from versions.env
+
+    Raises:
+        ConfigError: If versions.env not found or invalid
     """
+    from opencenter_build.config import parse_versions_env
+
+    # Load versions.env
+    if versions_env is None:
+        versions_env = Path("config/versions.env")
+
+    if not versions_env.exists():
+        raise ConfigError(
+            f"versions.env not found: {versions_env}\n"
+            "Create config/versions.env with component versions first"
+        )
+
+    versions = parse_versions_env(versions_env)
+
     manifest = ComponentManifest()
 
     # Kubernetes binaries
+    k8s_version = versions.get("KUBERNETES_VERSION", "v1.34.3").lstrip("v")
     manifest.kubernetes = KubernetesComponent(
-        version="1.34.3",
+        version=k8s_version,
         binaries=[
             {
                 "name": "kubectl",
@@ -386,74 +437,112 @@ def create_default_manifest(template: str = "baremetal") -> ComponentManifest:
         ],
     )
 
-    # CLI tools
-    manifest.add_tool(
-        name="helm",
-        version="3.14.0",
-        url="https://get.helm.sh/helm-v{{version}}-linux-amd64.tar.gz",
-        extract=True,
-        binary="linux-amd64/helm",
-    )
-
-    manifest.add_tool(
-        name="k9s",
-        version="0.32.4",
-        url="https://github.com/derailed/k9s/releases/download/v{{version}}/k9s_Linux_amd64.tar.gz",
-        extract=True,
-        binary="k9s",
-    )
-
-    # Git repositories
-    manifest.add_repository(
-        name="kubespray",
-        url="https://github.com/kubernetes-sigs/kubespray.git",
-        ref="master",
-    )
-
-    manifest.add_repository(
-        name="opencenter-gitops-base",
-        url="https://github.com/rackerlabs/opencenter-gitops-base.git",
-        ref="v1.0.0",
-    )
-
-    # Image auto-discovery
-    manifest.images.auto_discover.append(
-        ImageDiscovery(
-            source="repositories.kubespray",
-            patterns=[
-                "roles/*/defaults/main.yml",
-                "inventory/*/group_vars/*.yml",
-            ],
+    # CLI tools from versions.env
+    if "HELM_VERSION" in versions:
+        manifest.add_tool(
+            name="helm",
+            version=versions["HELM_VERSION"].lstrip("v"),
+            url="https://get.helm.sh/helm-v{{version}}-linux-amd64.tar.gz",
+            extract=True,
+            binary="linux-amd64/helm",
         )
-    )
 
-    # Helm charts
-    manifest.add_chart(
-        name="cert-manager",
-        repo="https://charts.jetstack.io",
-        version="v1.13.0",
-    )
+    if "K9S_VERSION" in versions:
+        manifest.add_tool(
+            name="k9s",
+            version=versions["K9S_VERSION"].lstrip("v"),
+            url="https://github.com/derailed/k9s/releases/download/v{{version}}/k9s_Linux_amd64.tar.gz",
+            extract=True,
+            binary="k9s",
+        )
 
-    manifest.add_chart(
-        name="ingress-nginx",
-        repo="https://kubernetes.github.io/ingress-nginx",
-        version="4.8.3",
-    )
+    if "STERN_VERSION" in versions:
+        manifest.add_tool(
+            name="stern",
+            version=versions["STERN_VERSION"].lstrip("v"),
+            url="https://github.com/stern/stern/releases/download/v{{version}}/stern_{{version}}_linux_amd64.tar.gz",
+            extract=True,
+            binary="stern",
+        )
+
+    if "YQ_VERSION" in versions:
+        manifest.add_tool(
+            name="yq",
+            version=versions["YQ_VERSION"].lstrip("v"),
+            url="https://github.com/mikefarah/yq/releases/download/v{{version}}/yq_linux_amd64",
+            extract=False,
+        )
+
+    if "JQ_VERSION" in versions:
+        manifest.add_tool(
+            name="jq",
+            version=versions["JQ_VERSION"].lstrip("v"),
+            url="https://github.com/jqlang/jq/releases/download/jq-{{version}}/jq-linux-amd64",
+            extract=False,
+        )
+
+    # Git repositories from versions.env
+    if "KUBESPRAY_VERSION" in versions:
+        manifest.add_repository(
+            name="kubespray",
+            url="https://github.com/kubernetes-sigs/kubespray.git",
+            ref=versions["KUBESPRAY_VERSION"],
+        )
+
+    if "OPENCENTER_GITOPS_BASE_REPO" in versions:
+        manifest.add_repository(
+            name="opencenter-gitops-base",
+            url=versions["OPENCENTER_GITOPS_BASE_REPO"],
+            ref=versions.get("OPENCENTER_GITOPS_BASE_VERSION", "main"),
+        )
+
+    # Image auto-discovery from repositories
+    if manifest.repositories:
+        for repo in manifest.repositories:
+            if repo.name == "kubespray":
+                manifest.images.auto_discover.append(
+                    ImageDiscovery(
+                        source=f"repositories.{repo.name}",
+                        patterns=[
+                            "roles/*/defaults/main.yml",
+                            "inventory/*/group_vars/*.yml",
+                        ],
+                    )
+                )
+
+    # Helm charts from versions.env
+    if "CERT_MANAGER_VERSION" in versions:
+        manifest.add_chart(
+            name="cert-manager",
+            repo="https://charts.jetstack.io",
+            version=versions["CERT_MANAGER_VERSION"],
+        )
+
+    if "INGRESS_NGINX_VERSION" in versions:
+        manifest.add_chart(
+            name="ingress-nginx",
+            repo="https://kubernetes.github.io/ingress-nginx",
+            version=versions["INGRESS_NGINX_VERSION"],
+        )
 
     # Terraform providers (OpenStack only)
     if template == "openstack":
-        manifest.terraform_providers.append(
-            TerraformProviderComponent(
-                name="openstack",
-                source="terraform-provider-openstack/openstack",
-                version="1.54.1",
+        if "OPENSTACK_PROVIDER_VERSION" in versions:
+            manifest.terraform_providers.append(
+                TerraformProviderComponent(
+                    name="openstack",
+                    source="terraform-provider-openstack/openstack",
+                    version=versions["OPENSTACK_PROVIDER_VERSION"],
+                )
             )
-        )
-        manifest.terraform_providers.append(
-            TerraformProviderComponent(
-                name="local", source="hashicorp/local", version="2.4.1"
+        if "LOCAL_PROVIDER_VERSION" in versions:
+            manifest.terraform_providers.append(
+                TerraformProviderComponent(
+                    name="local",
+                    source="hashicorp/local",
+                    version=versions["LOCAL_PROVIDER_VERSION"],
+                )
             )
-        )
 
     return manifest
 
@@ -489,7 +578,10 @@ def read_manifest(path: Path) -> ComponentManifest:
 
 
 def write_manifest(manifest: ComponentManifest, path: Path) -> None:
-    """Write component manifest to YAML file.
+    """Write component manifest to YAML file with metadata.
+
+    Adds generation metadata and header comment explaining auto-generation.
+    Manual edits are preserved during regeneration via merge strategy.
 
     Args:
         manifest: ComponentManifest to write
@@ -498,12 +590,36 @@ def write_manifest(manifest: ComponentManifest, path: Path) -> None:
     Raises:
         ConfigError: If write fails
     """
+    from datetime import datetime, timezone
+
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         data = manifest.to_dict()
 
+        # Add generation metadata
+        metadata = {
+            "_generated": {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "source": "config/versions.env",
+                "tool": "opencenter-airgap",
+                "note": "This file is auto-generated. Manual edits are preserved during regeneration.",
+            }
+        }
+
+        # Merge metadata at the beginning
+        data = {**metadata, **data}
+
+        # Header comment explaining auto-generation
+        header = """# Component Manifest
+# Auto-generated from config/versions.env
+# Manual edits are preserved during regeneration
+# To regenerate: python3 -m opencenter_build.cli build --force-regenerate
+
+"""
+
         with open(path, "w") as f:
+            f.write(header)
             yaml.dump(
                 data,
                 f,
@@ -514,3 +630,287 @@ def write_manifest(manifest: ComponentManifest, path: Path) -> None:
 
     except Exception as exc:
         raise ConfigError(f"Failed to write component manifest: {exc}") from exc
+
+
+def should_regenerate_manifest(versions_env: Path, manifest: Path, force: bool = False) -> bool:
+    """Determine if components.yaml should be regenerated.
+
+    Args:
+        versions_env: Path to versions.env file
+        manifest: Path to components.yaml file
+        force: Force regeneration regardless of other conditions
+
+    Returns:
+        True if manifest should be regenerated, False otherwise
+    """
+    if force:
+        return True
+
+    if not manifest.exists():
+        return True
+
+    if not versions_env.exists():
+        return False
+
+    # Compare modification times
+    versions_mtime = versions_env.stat().st_mtime
+    manifest_mtime = manifest.stat().st_mtime
+
+    return versions_mtime > manifest_mtime
+
+
+def merge_manifests(existing: ComponentManifest, generated: ComponentManifest) -> ComponentManifest:
+    """Merge existing manual edits with generated manifest.
+
+    Strategy:
+    - Use generated versions for all components
+    - Preserve additional images from existing
+    - Preserve additional charts from existing
+    - Preserve custom tools not in generated
+    - Preserve metadata from existing
+
+    Args:
+        existing: Existing manifest with potential manual edits
+        generated: Newly generated manifest from versions.env
+
+    Returns:
+        Merged ComponentManifest
+    """
+    # Start with generated manifest
+    merged = ComponentManifest()
+
+    # Preserve metadata from existing manifest
+    merged._generated = existing._generated
+
+    # Copy generated components (these have updated versions)
+    merged.kubernetes = generated.kubernetes
+    merged.tools = generated.tools.copy()
+    merged.repositories = generated.repositories.copy()
+    merged.os_packages = generated.os_packages
+    merged.python_packages = generated.python_packages
+    merged.terraform_providers = generated.terraform_providers.copy()
+
+    # Merge images - preserve additional images from existing
+    merged.images = ImagesComponent(
+        auto_discover=generated.images.auto_discover.copy(),
+        additional=generated.images.additional.copy(),
+    )
+
+    existing_images = set(existing.images.additional)
+    generated_images = set(generated.images.additional)
+    additional_images = existing_images - generated_images
+
+    merged.images.additional.extend(sorted(additional_images))
+
+    # Merge charts - preserve charts not in generated
+    merged.charts = generated.charts.copy()
+
+    existing_chart_names = {c.name for c in existing.charts}
+    generated_chart_names = {c.name for c in generated.charts}
+
+    for chart in existing.charts:
+        if chart.name not in generated_chart_names:
+            merged.charts.append(chart)
+
+    # Merge tools - preserve custom tools not in generated
+    existing_tool_names = {t.name for t in existing.tools}
+    generated_tool_names = {t.name for t in generated.tools}
+
+    for tool in existing.tools:
+        if tool.name not in generated_tool_names:
+            merged.tools.append(tool)
+
+    return merged
+
+
+def extract_repos_from_versions(versions: dict[str, str]) -> list[RepoSpec]:
+    """Extract repository specifications from versions.env.
+
+    Looks for patterns:
+    - KUBESPRAY_VERSION + KUBESPRAY_COMMIT_SHA
+    - OPENCENTER_GITOPS_BASE_REPO + OPENCENTER_GITOPS_BASE_VERSION
+
+    Args:
+        versions: Dictionary of version variables from versions.env
+
+    Returns:
+        List of RepoSpec objects for repositories found in versions.env
+    """
+    repos = []
+
+    # Kubespray repository
+    if "KUBESPRAY_VERSION" in versions:
+        repos.append(
+            RepoSpec(
+                name="kubespray",
+                url="https://github.com/kubernetes-sigs/kubespray.git",
+                ref=versions["KUBESPRAY_VERSION"],
+            )
+        )
+
+    # openCenter GitOps Base repository
+    if "OPENCENTER_GITOPS_BASE_REPO" in versions:
+        repos.append(
+            RepoSpec(
+                name="opencenter-gitops-base",
+                url=versions["OPENCENTER_GITOPS_BASE_REPO"],
+                ref=versions.get("OPENCENTER_GITOPS_BASE_VERSION", "main"),
+            )
+        )
+
+    return repos
+
+
+def clone_repository(repo_spec: RepoSpec, build_dir: Path | None = None) -> Path:
+    """Clone repository to build/ directory.
+
+    Checks if repository already exists before cloning. Uses shallow clone
+    with depth 1 for efficiency.
+
+    Args:
+        repo_spec: Repository specification with name, url, and ref
+        build_dir: Build directory (default: build/)
+
+    Returns:
+        Path to cloned repository
+
+    Raises:
+        ConfigError: If clone fails
+    """
+    import subprocess
+    from rich.console import Console
+
+    console = Console()
+
+    if build_dir is None:
+        build_dir = Path("build")
+
+    repo_path = build_dir / repo_spec.name
+
+    # Check if repository already exists
+    if repo_path.exists():
+        console.print(f"[cyan]Repository already exists:[/cyan] {repo_path}")
+        return repo_path
+
+    # Create build directory if needed
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clone repository
+    console.print(f"[cyan]Cloning {repo_spec.name}...[/cyan]")
+    console.print(f"  URL: {repo_spec.url}")
+    console.print(f"  Ref: {repo_spec.ref}")
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                repo_spec.ref,
+                repo_spec.url,
+                str(repo_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        console.print(f"[green]✓[/green] Cloned to: {repo_path}")
+        return repo_path
+
+    except subprocess.CalledProcessError as exc:
+        error_msg = f"Failed to clone repository {repo_spec.name}: {exc.stderr}"
+        console.print(f"[red]✗[/red] {error_msg}")
+        raise ConfigError(error_msg) from exc
+    except FileNotFoundError:
+        error_msg = "git command not found. Please install git."
+        console.print(f"[red]✗[/red] {error_msg}")
+        raise ConfigError(error_msg)
+
+
+class HelmChartScanner:
+    """Scanner for discovering Helm charts in repositories.
+
+    Scans repositories for Chart.yaml files and extracts chart metadata
+    (name, version). Returns ChartComponent objects with local paths.
+    """
+
+    def __init__(self, repos: list[Path]):
+        """Initialize scanner with repository paths.
+
+        Args:
+            repos: List of repository paths to scan
+        """
+        self.repos = repos
+
+    def scan_all(self) -> list[ChartComponent]:
+        """Scan all repositories for Helm charts.
+
+        Looks for Chart.yaml files, parses metadata, and creates
+        ChartComponent objects with local paths.
+
+        Returns:
+            List of discovered ChartComponent objects
+        """
+        charts = []
+
+        for repo in self.repos:
+            if not repo.exists():
+                continue
+
+            # Find all Chart.yaml files in repository
+            for chart_yaml in repo.rglob("Chart.yaml"):
+                chart = self._parse_chart_yaml(chart_yaml, repo)
+                if chart:
+                    charts.append(chart)
+
+        return charts
+
+    def _parse_chart_yaml(self, chart_path: Path, repo_root: Path) -> ChartComponent | None:
+        """Parse Chart.yaml and extract metadata.
+
+        Args:
+            chart_path: Path to Chart.yaml file
+            repo_root: Root path of repository
+
+        Returns:
+            ChartComponent with extracted metadata, or None if parse fails
+        """
+        try:
+            with open(chart_path) as f:
+                data = yaml.safe_load(f)
+
+            if not data:
+                return None
+
+            # Extract required fields
+            name = data.get("name")
+            version = data.get("version")
+
+            if not name or not version:
+                return None
+
+            # Calculate relative path from repo root
+            chart_dir = chart_path.parent
+            try:
+                relative_path = chart_dir.relative_to(repo_root)
+            except ValueError:
+                # If chart_dir is not relative to repo_root, use absolute path
+                relative_path = chart_dir
+
+            # Create ChartComponent with local path
+            return ChartComponent(
+                name=name,
+                version=version,
+                repo=str(repo_root),  # Local repository path
+                path=str(relative_path),
+            )
+
+        except yaml.YAMLError:
+            # Invalid YAML - skip this chart
+            return None
+        except Exception:
+            # Any other error - skip this chart
+            return None
