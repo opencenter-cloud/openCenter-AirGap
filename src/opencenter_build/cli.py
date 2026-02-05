@@ -795,27 +795,39 @@ def build(
             """Scan repositories for container images."""
             console.print("  [cyan]Scanning repositories...[/cyan]")
 
-            # Read git repositories list
-            git_repos_file = Path("config/git-repositories.txt")
-            if not git_repos_file.exists():
-                console.print(f"  [yellow]⚠[/yellow] No git-repositories.txt found, skipping scan")
-                return {"images": "config/all-images.txt", "count": "0"}
+            # Auto-clone repositories from versions.env if not present
+            from opencenter_build.component_manifest import (
+                extract_repos_from_versions,
+                clone_repository,
+                RepoSpec,
+            )
 
-            # Parse repository paths
+            versions = parse_versions_env(config_file)
+            repos_to_clone = extract_repos_from_versions(versions)
+
+            # Add kubespray-offline if not in versions.env
+            kubespray_offline_spec = RepoSpec(
+                name="kubespray-offline",
+                url="https://github.com/kubespray-offline/kubespray-offline.git",
+                ref="develop",
+            )
+
+            # Check if kubespray-offline already in list
+            if not any(r.name == "kubespray-offline" for r in repos_to_clone):
+                repos_to_clone.append(kubespray_offline_spec)
+
+            # Clone repositories
             repo_paths = []
-            for line in git_repos_file.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    # Extract repo name from URL or path
-                    repo_name = line.split("/")[-1].replace(".git", "")
-                    repo_path = Path("build") / repo_name
-                    if repo_path.exists():
-                        repo_paths.append(repo_path)
+            for repo_spec in repos_to_clone:
+                try:
+                    repo_path = clone_repository(repo_spec)
+                    repo_paths.append(repo_path)
+                except Exception as exc:
+                    console.print(f"  [yellow]⚠[/yellow] Failed to clone {repo_spec.name}: {exc}")
+                    continue
 
             if not repo_paths:
-                console.print(
-                    f"  [yellow]⚠[/yellow] No repositories found in build/, skipping scan"
-                )
+                console.print(f"  [yellow]⚠[/yellow] No repositories available for scanning")
                 return {"images": "config/all-images.txt", "count": "0"}
 
             # Scan repositories
@@ -832,6 +844,7 @@ def build(
             output_file.parent.mkdir(parents=True, exist_ok=True)
             output_file.write_text("\n".join(sorted(all_images)) + "\n")
 
+            console.print(f"  [green]✓[/green] Cloned {len(repo_paths)} repositories")
             console.print(f"  [green]✓[/green] Found {len(all_images)} images")
             return {"images": str(output_file), "count": str(len(all_images))}
 
@@ -839,21 +852,8 @@ def build(
             """Collect Helm charts from GitOps manifests."""
             console.print("  [cyan]Collecting Helm charts...[/cyan]")
 
-            # Check if repositories are cloned
-            git_repos_file = Path("config/git-repositories.txt")
-            if not git_repos_file.exists():
-                console.print(f"  [yellow]⚠[/yellow] No git-repositories.txt found, skipping")
-                return {"charts": "", "status": "skipped", "reason": "no_repos_file"}
-
-            # Parse repository paths
-            repo_paths = []
-            for line in git_repos_file.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    repo_name = line.split("/")[-1].replace(".git", "")
-                    repo_path = Path("build") / repo_name
-                    if repo_path.exists():
-                        repo_paths.append(repo_path)
+            # Use cloned repositories from build/
+            repo_paths = [p for p in Path("build").iterdir() if p.is_dir() and (p / ".git").exists()]
 
             if not repo_paths:
                 console.print(f"  [yellow]⚠[/yellow] No repositories found in build/")
