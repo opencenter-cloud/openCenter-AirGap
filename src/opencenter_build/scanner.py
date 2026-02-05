@@ -563,6 +563,69 @@ class GitOpsScanner:
                 f.write(f"{name}={url}\n")
 
     @staticmethod
+    def write_helm_charts_file(
+        releases: list[HelmReleaseSpec], output_path: Path
+    ) -> None:
+        """Write Helm chart list to file.
+
+        Creates a text file with format:
+        repo=chart:version
+
+        Args:
+            releases: List of HelmReleaseSpec objects
+            output_path: Path to output file (e.g., config/helm-charts.txt)
+        """
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, "w") as f:
+            f.write("# Helm Charts discovered from GitOps manifests\n")
+            f.write("# Format: repo=chart:version\n\n")
+
+            # Sort by repo, then chart name
+            sorted_releases = sorted(
+                releases, key=lambda r: (r.source_ref, r.chart, r.version or "")
+            )
+
+            for release in sorted_releases:
+                version = release.version or "latest"
+                f.write(f"{release.source_ref}={release.chart}:{version}\n")
+
+    @staticmethod
+    def read_helm_charts_file(input_path: Path) -> list[HelmReleaseSpec]:
+        """Read Helm charts from file.
+
+        Args:
+            input_path: Path to helm-charts.txt file
+
+        Returns:
+            List of HelmReleaseSpec objects
+        """
+        releases = []
+
+        if not input_path.exists():
+            return releases
+
+        with open(input_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+
+                if "=" in line and ":" in line:
+                    repo_part, chart_part = line.split("=", 1)
+                    chart_name, version = chart_part.split(":", 1)
+
+                    releases.append(
+                        HelmReleaseSpec(
+                            chart=chart_name.strip(),
+                            source_ref=repo_part.strip(),
+                            version=version.strip() if version.strip() != "latest" else None,
+                        )
+                    )
+
+        return releases
+
+    @staticmethod
     def read_helm_repos_file(input_path: Path) -> dict[str, str]:
         """Read Helm repositories from file.
 

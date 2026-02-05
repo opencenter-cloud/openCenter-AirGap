@@ -484,6 +484,15 @@ def scan(
         if verbose:
             console.print(f"[green]✓[/green] Wrote Helm repositories to {helm_repos_file}")
 
+        # Write Helm charts to file
+        helm_charts_file = Path("config/helm-charts.txt")
+        from opencenter_build.scanner import GitOpsScanner
+
+        GitOpsScanner.write_helm_charts_file(helm_releases, helm_charts_file)
+
+        if verbose:
+            console.print(f"[green]✓[/green] Wrote Helm charts to {helm_charts_file}")
+
         # Extract images from Helm releases
         console.print("[cyan]Extracting images from Helm releases...[/cyan]")
         from opencenter_build.scanner import HelmChartImageExtractor
@@ -564,6 +573,7 @@ def scan(
         console.print(f"[green]✓[/green] Results written to: {output}")
         console.print(f"[green]✓[/green] Manifest updated: {manifest_path}")
         console.print(f"[green]✓[/green] Helm repositories written to: {helm_repos_file}")
+        console.print(f"[green]✓[/green] Helm charts written to: {helm_charts_file}")
 
         if verbose:
             console.print("\nTop 10 images:")
@@ -873,6 +883,13 @@ def build(
             gitops_scanner.helm_repos = helm_repos
             gitops_scanner.write_helm_repos_file(helm_repos_file)
             console.print(f"  [green]✓[/green] Wrote {len(helm_repos)} repos to {helm_repos_file}")
+
+            # Write Helm charts to file
+            helm_charts_file = Path("config/helm-charts.txt")
+            GitOpsScanner.write_helm_charts_file(helm_releases, helm_charts_file)
+            console.print(
+                f"  [green]✓[/green] Wrote {len(helm_releases)} charts to {helm_charts_file}"
+            )
 
             # Extract images from Helm charts
             helm_extractor = HelmChartImageExtractor(cache_dir=Path("build/helm-cache"))
