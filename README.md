@@ -70,8 +70,8 @@ EOF
 # Optional: Customize components
 # Edit config/components.yaml to add/remove images, charts, repos, tools
 
-# Scan repositories for images (if repos configured)
-python3 -m opencenter_build.cli scan
+# Optional: Scan repositories for images (if repos configured in manifest)
+python3 -m opencenter_build.cli scan --discover-images
 
 # Build package (generates manifest and Zarf config)
 python3 -m opencenter_build.cli build
@@ -130,7 +130,7 @@ Full navigation: [Documentation Taxonomy](docs/taxonomy.md)
 
 ```bash
 # Initialize new build environment
-python3 -m opencenter_build.cli init [--template baremetal|openstack]
+python3 -m opencenter_build.cli init [--create-manifest] [--template baremetal|openstack]
 
 # Add components to manifest
 python3 -m opencenter_build.cli add tool --name kubectl --version v1.34.3 --url <url>
@@ -138,7 +138,8 @@ python3 -m opencenter_build.cli add image registry.k8s.io/kube-apiserver:v1.34.3
 python3 -m opencenter_build.cli add repo https://github.com/kubernetes-sigs/kubespray.git
 
 # Scan repositories for images
-python3 -m opencenter_build.cli scan
+python3 -m opencenter_build.cli scan --discover-images
+python3 -m opencenter_build.cli scan --repo build/kubespray --repo build/genestack
 
 # Build package
 python3 -m opencenter_build.cli build [--clean] [--resume]
@@ -151,6 +152,12 @@ python3 -m opencenter_build.cli verify <package> [--manifest <manifest>]
 
 # Validate configuration
 python3 -m opencenter_build.cli validate
+
+# Display version
+python3 -m opencenter_build.cli version
+
+# Clean build artifacts
+python3 -m opencenter_build.cli clean
 ```
 
 See [CLI Reference](docs/reference/cli-commands.md) for complete command documentation.
