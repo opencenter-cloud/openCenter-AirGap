@@ -56,8 +56,8 @@ python3 -m opencenter_build.cli --help
 ### Build Package (Zone A - Connected)
 
 ```bash
-# Initialize build environment
-python3 -m opencenter_build.cli init
+# Initialize build environment with component manifest
+python3 -m opencenter_build.cli init --create-manifest
 
 # Create versions.env (required)
 cat > config/versions.env << 'EOF'
@@ -68,7 +68,7 @@ RUNC_VERSION=1.3.4
 EOF
 
 # Optional: Customize components
-# Edit config/components.yaml to add/remove images, charts, repos
+# Edit config/components.yaml to add/remove images, charts, repos, tools
 
 # Scan repositories for images (if repos configured)
 python3 -m opencenter_build.cli scan
