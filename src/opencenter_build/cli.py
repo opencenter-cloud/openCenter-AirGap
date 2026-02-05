@@ -853,7 +853,9 @@ def build(
             console.print("  [cyan]Collecting Helm charts...[/cyan]")
 
             # Use cloned repositories from build/
-            repo_paths = [p for p in Path("build").iterdir() if p.is_dir() and (p / ".git").exists()]
+            repo_paths = [
+                p for p in Path("build").iterdir() if p.is_dir() and (p / ".git").exists()
+            ]
 
             if not repo_paths:
                 console.print(f"  [yellow]⚠[/yellow] No repositories found in build/")
@@ -895,7 +897,9 @@ def build(
             helm_extractor = HelmChartImageExtractor(cache_dir=Path("build/helm-cache"))
             helm_images = helm_extractor.extract_images_from_releases(helm_releases, helm_repos)
 
-            console.print(f"  [green]✓[/green] Extracted {len(helm_images)} images from Helm charts")
+            console.print(
+                f"  [green]✓[/green] Extracted {len(helm_images)} images from Helm charts"
+            )
 
             # Merge with existing all-images.txt
             all_images_file = Path("config/all-images.txt")
@@ -925,9 +929,7 @@ def build(
             # Check if kubespray-offline exists (should be cloned in scan_repositories)
             kubespray_dir = Path("build/kubespray-offline")
             if not kubespray_dir.exists():
-                console.print(
-                    f"  [red]✗[/red] kubespray-offline not found at {kubespray_dir}"
-                )
+                console.print(f"  [red]✗[/red] kubespray-offline not found at {kubespray_dir}")
                 return {"assets": "", "status": "error", "reason": "kubespray_offline_not_found"}
 
             # Check if download-all.sh exists
@@ -2011,6 +2013,7 @@ def version() -> None:
     Example:
         opencenter-airgap version
     """
+    from importlib.metadata import version as get_version, PackageNotFoundError
     from rich.table import Table
     from opencenter_build import __version__
 
@@ -2026,19 +2029,18 @@ def version() -> None:
 
     # Key dependencies
     dependencies = [
-        ("typer", "typer"),
-        ("rich", "rich"),
-        ("pyyaml", "yaml"),
-        ("hypothesis", "hypothesis"),
-        ("jsonschema", "jsonschema"),
+        "typer",
+        "rich",
+        "pyyaml",
+        "hypothesis",
+        "jsonschema",
     ]
 
-    for dep_name, import_name in dependencies:
+    for dep_name in dependencies:
         try:
-            module = __import__(import_name)
-            version_str = getattr(module, "__version__", "unknown")
+            version_str = get_version(dep_name)
             table.add_row(dep_name, version_str)
-        except ImportError:
+        except PackageNotFoundError:
             table.add_row(dep_name, "[red]not installed[/red]")
 
     console.print(table)
