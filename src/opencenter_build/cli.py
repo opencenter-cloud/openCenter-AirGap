@@ -452,6 +452,31 @@ def scan(
             for chart in discovered_charts:
                 console.print(f"  - {chart.name} v{chart.version} ({chart.path})")
 
+        # Scan for GitOps resources (HelmRepository and HelmRelease)
+        console.print("[cyan]Scanning for GitOps resources...[/cyan]")
+        from opencenter_build.scanner import GitOpsScanner
+
+        gitops_scanner = GitOpsScanner(repos=valid_repos)
+        helm_repos, helm_releases = gitops_scanner.scan_all()
+
+        if verbose:
+            console.print(f"[cyan]Found {len(helm_repos)} Helm repositories[/cyan]")
+            for name, url in list(helm_repos.items())[:5]:
+                console.print(f"  - {name}: {url}")
+            console.print(f"[cyan]Found {len(helm_releases)} Helm releases[/cyan]")
+            for release in helm_releases[:5]:
+                console.print(
+                    f"  - {release.chart} (from {release.source_ref}, version: {release.version})"
+                )
+
+        # Write Helm repositories to file
+        helm_repos_file = Path("config/helm-repos.txt")
+        gitops_scanner.helm_repos = helm_repos
+        gitops_scanner.write_helm_repos_file(helm_repos_file)
+
+        if verbose:
+            console.print(f"[green]✓[/green] Wrote Helm repositories to {helm_repos_file}")
+
         # Update component manifest with discoveries
         console.print("[cyan]Updating component manifest...[/cyan]")
         from opencenter_build.component_manifest import (
@@ -508,11 +533,14 @@ def scan(
             )
         console.print(f"  Images discovered: {len(all_images)}")
         console.print(f"  Charts discovered: {len(discovered_charts)}")
+        console.print(f"  Helm repositories discovered: {len(helm_repos)}")
+        console.print(f"  Helm releases discovered: {len(helm_releases)}")
         console.print(f"  Images added to manifest: {added_images}")
         console.print(f"  Charts added to manifest: {added_charts}")
         console.print()
         console.print(f"[green]✓[/green] Results written to: {output}")
         console.print(f"[green]✓[/green] Manifest updated: {manifest_path}")
+        console.print(f"[green]✓[/green] Helm repositories written to: {helm_repos_file}")
 
         if verbose:
             console.print("\nTop 10 images:")
