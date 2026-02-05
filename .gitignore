@@ -34,6 +34,7 @@ env/
 ENV/
 .venv
 .hypothesis
+*egg-info*
 
 # Testing
 .pytest_cache/
@@ -71,3 +72,5 @@ zarf-package-*.tar.zst
 checksums.txt
 testdata/
 test-data
+build
+config

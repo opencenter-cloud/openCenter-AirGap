@@ -621,3 +621,268 @@ class GitOpsScanner:
         # HTTP/HTTPS format: https://repo/path/chart-version.tgz
         chart_url = f"{repo_url.rstrip('/')}/{release.chart}"
         return chart_url
+
+
+class HelmChartImageExtractor:
+    """Extract container images from Helm charts.
+
+    Downloads Helm charts and extracts container image references from
+    values.yaml and template files.
+    """
+
+    def __init__(self, cache_dir: Path | None = None):
+        """Initialize Helm chart image extractor.
+
+        Args:
+            cache_dir: Directory to cache downloaded charts (default: build/helm-cache)
+        """
+        self.cache_dir = cache_dir or Path("build/helm-cache")
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def extract_images_from_releases(
+        self,
+        releases: list[HelmReleaseSpec],
+        helm_repos: dict[str, str],
+    ) -> set[str]:
+        """Extract all images from Helm releases.
+
+        Downloads charts, parses values/templates, extracts image references.
+
+        Args:
+            releases: List of HelmRelease specifications
+            helm_repos: Dictionary mapping repository names to URLs
+
+        Returns:
+            Set of discovered container image references
+        """
+        all_images = set()
+
+        for release in releases:
+            try:
+                images = self._extract_images_from_release(release, helm_repos)
+                all_images.update(images)
+            except Exception:
+                # Skip releases that fail to process
+                continue
+
+        return all_images
+
+    def _extract_images_from_release(
+        self,
+        release: HelmReleaseSpec,
+        helm_repos: dict[str, str],
+    ) -> set[str]:
+        """Extract images from single Helm release.
+
+        Args:
+            release: HelmRelease specification
+            helm_repos: Dictionary mapping repository names to URLs
+
+        Returns:
+            Set of image references from this release
+        """
+        # Resolve chart URL
+        chart_url = GitOpsScanner.resolve_helm_chart_url(release, helm_repos)
+        if not chart_url:
+            return set()
+
+        # Download chart
+        chart_path = self._download_chart(chart_url, release)
+        if not chart_path:
+            return set()
+
+        # Extract images from chart
+        return self._scan_chart_for_images(chart_path)
+
+    def _download_chart(
+        self,
+        chart_url: str,
+        release: HelmReleaseSpec,
+    ) -> Path | None:
+        """Download Helm chart to cache directory.
+
+        Uses helm pull command to download chart.
+
+        Args:
+            chart_url: Full chart URL (http/https/oci)
+            release: HelmRelease specification
+
+        Returns:
+            Path to downloaded chart directory, or None if download fails
+        """
+        import subprocess
+        import tarfile
+
+        # Create cache subdirectory for this chart
+        chart_cache = self.cache_dir / release.source_ref / release.chart
+        if release.version:
+            chart_cache = chart_cache / release.version
+
+        # Check if already cached
+        if chart_cache.exists() and any(chart_cache.iterdir()):
+            return chart_cache
+
+        chart_cache.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Build helm pull command
+            cmd = ["helm", "pull", chart_url]
+
+            if release.version:
+                cmd.extend(["--version", release.version])
+
+            cmd.extend(["--untar", "--untardir", str(chart_cache)])
+
+            # Execute helm pull
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minute timeout
+            )
+
+            if result.returncode != 0:
+                return None
+
+            # Find the extracted chart directory
+            chart_dirs = [d for d in chart_cache.iterdir() if d.is_dir()]
+            if chart_dirs:
+                return chart_dirs[0]
+
+            return None
+
+        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            return None
+
+    def _scan_chart_for_images(self, chart_path: Path) -> set[str]:
+        """Scan Helm chart directory for container images.
+
+        Looks for image references in:
+        - values.yaml
+        - values-*.yaml
+        - templates/*.yaml
+
+        Args:
+            chart_path: Path to extracted chart directory
+
+        Returns:
+            Set of discovered image references
+        """
+        images = set()
+
+        # Scan values files
+        for values_file in chart_path.glob("values*.yaml"):
+            if values_file.is_file():
+                file_images = self._extract_images_from_yaml(values_file)
+                images.update(file_images)
+
+        # Scan template files
+        templates_dir = chart_path / "templates"
+        if templates_dir.exists():
+            for template_file in templates_dir.rglob("*.yaml"):
+                if template_file.is_file():
+                    file_images = self._extract_images_from_yaml(template_file)
+                    images.update(file_images)
+
+        return images
+
+    def _extract_images_from_yaml(self, yaml_file: Path) -> set[str]:
+        """Extract image references from YAML file.
+
+        Looks for common patterns:
+        - image: registry/repo:tag
+        - repository: registry/repo + tag: version
+        - registry: + repository: + tag:
+
+        Args:
+            yaml_file: Path to YAML file
+
+        Returns:
+            Set of image references
+        """
+        images = set()
+
+        try:
+            with open(yaml_file) as f:
+                content = f.read()
+
+            # Parse YAML
+            for doc in yaml.safe_load_all(content):
+                if not doc:
+                    continue
+
+                # Recursively search for image references
+                self._extract_images_from_dict(doc, images)
+
+        except (yaml.YAMLError, OSError, IOError):
+            pass
+
+        return images
+
+    def _extract_images_from_dict(self, data: dict | list | str, images: set[str]) -> None:
+        """Recursively extract image references from nested dict/list.
+
+        Args:
+            data: Dictionary, list, or string to search
+            images: Set to add discovered images to (modified in place)
+        """
+        if isinstance(data, dict):
+            # Check for image field
+            if "image" in data:
+                image = data["image"]
+                if isinstance(image, str) and self._is_valid_image(image):
+                    images.add(image)
+
+            # Check for repository + tag pattern
+            if "repository" in data and "tag" in data:
+                repo = data["repository"]
+                tag = data["tag"]
+                if isinstance(repo, str) and isinstance(tag, str):
+                    # Handle registry field if present
+                    if "registry" in data and isinstance(data["registry"], str):
+                        image = f"{data['registry']}/{repo}:{tag}"
+                    else:
+                        image = f"{repo}:{tag}"
+
+                    if self._is_valid_image(image):
+                        images.add(image)
+
+            # Recurse into nested dicts
+            for value in data.values():
+                self._extract_images_from_dict(value, images)
+
+        elif isinstance(data, list):
+            # Recurse into list items
+            for item in data:
+                self._extract_images_from_dict(item, images)
+
+    def _is_valid_image(self, image: str) -> bool:
+        """Validate image reference format.
+
+        Args:
+            image: Image reference string
+
+        Returns:
+            True if valid image reference
+        """
+        if not image or not isinstance(image, str):
+            return False
+
+        # Skip template variables
+        if "{{" in image or "}}" in image:
+            return False
+
+        # Must contain colon (tag) or slash (registry/repo)
+        if ":" not in image and "/" not in image:
+            return False
+
+        # Skip bare version numbers
+        if ":" in image and "/" not in image:
+            parts = image.split(":")
+            if len(parts) == 2 and parts[0] and parts[1]:
+                # Check if it looks like a valid image name
+                if not parts[0].replace(".", "").replace("-", "").replace("_", "").isdigit():
+                    return True
+            return False
+
+        return True

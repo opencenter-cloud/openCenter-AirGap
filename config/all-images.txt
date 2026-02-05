@@ -17,6 +17,7 @@ ghcr.io/open-telemetry/opentelemetry-operator/operator-opamp-bridge
 ghcr.io/rackerlabs/genestack-images/alert-proxy
 ghcr.io/rackerlabs/genestack-images/kubectl
 ghcr.io/weaveworks/wego-app
+ghcr.io/weaveworks/wego-app:v0.38.0
 ghcr.io/zalando/postgres-operator/logical-backup:v1.13.0
 ghcr.io/zalando/spilo-17:4.0-p2
 goharbor/harbor-core

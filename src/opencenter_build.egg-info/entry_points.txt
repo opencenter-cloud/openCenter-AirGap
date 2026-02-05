@@ -1,2 +1,0 @@
-[console_scripts]
-opencenter-airgap = opencenter_build.cli:main

@@ -477,6 +477,21 @@ def scan(
         if verbose:
             console.print(f"[green]✓[/green] Wrote Helm repositories to {helm_repos_file}")
 
+        # Extract images from Helm releases
+        console.print("[cyan]Extracting images from Helm releases...[/cyan]")
+        from opencenter_build.scanner import HelmChartImageExtractor
+
+        helm_extractor = HelmChartImageExtractor()
+        helm_images = helm_extractor.extract_images_from_releases(helm_releases, helm_repos)
+
+        if verbose:
+            console.print(f"[cyan]Extracted {len(helm_images)} images from Helm charts[/cyan]")
+            for image in list(helm_images)[:5]:
+                console.print(f"  - {image}")
+
+        # Merge Helm images with discovered images
+        all_images.update(helm_images)
+
         # Update component manifest with discoveries
         console.print("[cyan]Updating component manifest...[/cyan]")
         from opencenter_build.component_manifest import (
@@ -535,6 +550,7 @@ def scan(
         console.print(f"  Charts discovered: {len(discovered_charts)}")
         console.print(f"  Helm repositories discovered: {len(helm_repos)}")
         console.print(f"  Helm releases discovered: {len(helm_releases)}")
+        console.print(f"  Helm chart images extracted: {len(helm_images)}")
         console.print(f"  Images added to manifest: {added_images}")
         console.print(f"  Charts added to manifest: {added_charts}")
         console.print()
