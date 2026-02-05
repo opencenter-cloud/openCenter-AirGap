@@ -100,6 +100,7 @@ class BuildOrchestrator:
         # Define build steps in execution order
         self.steps = [
             "scan_repositories",
+            "collect_helm_charts",
             "collect_kubespray_offline",
             "mirror_terraform_providers",
             "organize_assets",

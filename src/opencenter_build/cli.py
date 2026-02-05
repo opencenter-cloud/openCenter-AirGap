@@ -825,6 +825,82 @@ def build(
             console.print(f"  [green]✓[/green] Found {len(all_images)} images")
             return {"images": str(output_file), "count": str(len(all_images))}
 
+        def collect_helm_charts() -> dict[str, str]:
+            """Collect Helm charts from GitOps manifests."""
+            console.print("  [cyan]Collecting Helm charts...[/cyan]")
+
+            # Check if repositories are cloned
+            git_repos_file = Path("config/git-repositories.txt")
+            if not git_repos_file.exists():
+                console.print(f"  [yellow]⚠[/yellow] No git-repositories.txt found, skipping")
+                return {"charts": "", "status": "skipped", "reason": "no_repos_file"}
+
+            # Parse repository paths
+            repo_paths = []
+            for line in git_repos_file.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    repo_name = line.split("/")[-1].replace(".git", "")
+                    repo_path = Path("build") / repo_name
+                    if repo_path.exists():
+                        repo_paths.append(repo_path)
+
+            if not repo_paths:
+                console.print(f"  [yellow]⚠[/yellow] No repositories found in build/")
+                return {"charts": "", "status": "skipped", "reason": "no_repos"}
+
+            # Scan for GitOps resources
+            from opencenter_build.scanner import GitOpsScanner, HelmChartImageExtractor
+
+            gitops_scanner = GitOpsScanner(repos=repo_paths)
+            helm_repos, helm_releases = gitops_scanner.scan_all()
+
+            console.print(
+                f"  [cyan]Found {len(helm_repos)} Helm repositories, {len(helm_releases)} releases[/cyan]"
+            )
+
+            if not helm_releases:
+                console.print(f"  [yellow]⚠[/yellow] No Helm releases found")
+                return {
+                    "charts": "",
+                    "status": "completed",
+                    "repos": str(len(helm_repos)),
+                    "releases": "0",
+                }
+
+            # Write Helm repositories to file
+            helm_repos_file = Path("config/helm-repos.txt")
+            gitops_scanner.helm_repos = helm_repos
+            gitops_scanner.write_helm_repos_file(helm_repos_file)
+            console.print(f"  [green]✓[/green] Wrote {len(helm_repos)} repos to {helm_repos_file}")
+
+            # Extract images from Helm charts
+            helm_extractor = HelmChartImageExtractor(cache_dir=Path("build/helm-cache"))
+            helm_images = helm_extractor.extract_images_from_releases(helm_releases, helm_repos)
+
+            console.print(f"  [green]✓[/green] Extracted {len(helm_images)} images from Helm charts")
+
+            # Merge with existing all-images.txt
+            all_images_file = Path("config/all-images.txt")
+            existing_images = set()
+            if all_images_file.exists():
+                existing_images = set(all_images_file.read_text().splitlines())
+
+            all_images = existing_images | helm_images
+            all_images_file.write_text("\n".join(sorted(all_images)) + "\n")
+
+            console.print(
+                f"  [green]✓[/green] Updated {all_images_file} with {len(all_images)} total images"
+            )
+
+            return {
+                "charts": "build/helm-cache",
+                "status": "completed",
+                "repos": str(len(helm_repos)),
+                "releases": str(len(helm_releases)),
+                "images": str(len(helm_images)),
+            }
+
         def collect_kubespray_offline() -> dict[str, str]:
             """Collect kubespray-offline assets."""
             console.print("  [cyan]Collecting kubespray-offline assets...[/cyan]")
@@ -1090,6 +1166,7 @@ def build(
             return {"manifest": str(manifest_path), "artifacts": str(artifact_count)}
 
         orchestrator.register_step_handler("scan_repositories", scan_repositories)
+        orchestrator.register_step_handler("collect_helm_charts", collect_helm_charts)
         orchestrator.register_step_handler("collect_kubespray_offline", collect_kubespray_offline)
         orchestrator.register_step_handler("mirror_terraform_providers", mirror_terraform_providers)
         orchestrator.register_step_handler("organize_assets", organize_assets)
