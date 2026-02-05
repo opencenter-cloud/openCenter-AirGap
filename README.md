@@ -1,8 +1,8 @@
 # openCenter AirGap
 
-**doc_type: explanation**
+**doc_type: reference**
 
-Single-artifact Kubernetes deployment for air-gapped environments. Packages infrastructure provisioning, cluster bootstrapping, and core services into one cryptographically verifiable Zarf archive.
+Build tool for creating air-gapped Kubernetes deployment packages. Collects container images, binaries, OS packages, and Python dependencies into a single cryptographically verifiable Zarf artifact.
 
 ## What This Is
 
@@ -32,33 +32,128 @@ The output is a single `.tar.zst` file with an SBOM and cryptographic signature.
 
 ## Quick Start
 
+### Prerequisites
+
+- Python 3.10+
+- Git
+- 100GB+ free disk space
+- Internet access (Zone A only)
+
+### Installation
+
 ```bash
-# Zone A: Build the package
+# Clone repository
 git clone <repo-url>
 cd opencenter-airgap
-python3 -m opencenter_build build --config config/components.yaml
 
-# Zone B: Transfer
-# Copy dist/zarf-package-*.tar.zst to removable media
+# Install package in development mode
+pip install -e .
 
-# Zone C: Deploy
-zarf package deploy zarf-package-*.tar.zst --confirm
+# Verify installation
+python3 -m opencenter_build.cli --help
 ```
 
-See [First Deployment Tutorial](docs/tutorials/01-first-deployment.md) for a complete walkthrough.
+### Build Package (Zone A - Connected)
+
+```bash
+# Initialize build environment
+python3 -m opencenter_build.cli init
+
+# Create versions.env (required)
+cat > config/versions.env << 'EOF'
+KUBERNETES_VERSION=1.34.3
+CALICO_VERSION=3.27.0
+CONTAINERD_VERSION=2.1.5
+RUNC_VERSION=1.3.4
+EOF
+
+# Optional: Customize components
+# Edit config/components.yaml to add/remove images, charts, repos
+
+# Scan repositories for images (if repos configured)
+python3 -m opencenter_build.cli scan
+
+# Build package (generates manifest and Zarf config)
+python3 -m opencenter_build.cli build
+
+# Check build status
+python3 -m opencenter_build.cli status
+
+# Verify generated artifacts
+ls -lh dist/
+```
+
+**Current Limitations:**
+- Full build requires kubespray-offline integration (in progress)
+- Zarf package creation requires Zarf CLI installed
+- Component manifest auto-discovery under development
+
+Output: `dist/artifact-manifest.json`, `zarf.yaml` (Zarf package creation requires `zarf package create`)
+
+### Transfer (Zone B - Airlock)
+
+```bash
+# Copy package to removable media
+cp dist/zarf-package-*.tar.zst /media/usb/
+
+# Verify checksum
+sha256sum dist/zarf-package-*.tar.zst > package.sha256
+```
+
+### Deploy (Zone C - Disconnected)
+
+```bash
+# On bastion host (requires Zarf CLI)
+zarf package deploy zarf-package-*.tar.zst --confirm
+
+# Verify deployment
+kubectl get nodes
+kubectl get pods -A
+```
+
+See [First Deployment Tutorial](docs/tutorials/01-first-deployment.md) for complete walkthrough.
 
 ## Documentation
 
-Documentation follows the [Diátaxis framework](https://diataxis.fr/). Pick your path:
+Documentation follows the [Diátaxis framework](https://diataxis.fr/):
 
 | I want to... | Start here |
 |--------------|------------|
 | Learn by doing | [First Deployment Tutorial](docs/tutorials/01-first-deployment.md) |
 | Complete a specific task | [How-to Guides](docs/taxonomy.md#how-to-guides) |
 | Look up technical details | [Reference Docs](docs/taxonomy.md#reference) |
-| Understand the design | [Architecture Explanation](docs/explanation/architecture/architecture-overview.md) |
+| Understand the design | [Architecture Review](docs/architecture-review.md) |
 
 Full navigation: [Documentation Taxonomy](docs/taxonomy.md)
+
+## CLI Commands
+
+```bash
+# Initialize new build environment
+python3 -m opencenter_build.cli init [--template baremetal|openstack]
+
+# Add components to manifest
+python3 -m opencenter_build.cli add tool --name kubectl --version v1.34.3 --url <url>
+python3 -m opencenter_build.cli add image registry.k8s.io/kube-apiserver:v1.34.3
+python3 -m opencenter_build.cli add repo https://github.com/kubernetes-sigs/kubespray.git
+
+# Scan repositories for images
+python3 -m opencenter_build.cli scan
+
+# Build package
+python3 -m opencenter_build.cli build [--clean] [--resume]
+
+# Check build status
+python3 -m opencenter_build.cli status
+
+# Verify package integrity
+python3 -m opencenter_build.cli verify <package> [--manifest <manifest>]
+
+# Validate configuration
+python3 -m opencenter_build.cli validate
+```
+
+See [CLI Reference](docs/reference/cli-commands.md) for complete command documentation.
 
 ## Key Concepts
 
@@ -121,35 +216,55 @@ All versions pinned in `config/versions.env`. See [Version Management](docs/refe
 
 ## Project Status
 
-Active development. Current focus:
+Active development. Python CLI migration in progress.
 
-- Python CLI migration (replacing bash orchestration)
-- Component manifest schema validation
-- Build determinism and reproducibility
+**Completed:**
+- Python CLI framework (init, add, scan, build, verify, status)
+- Component manifest management
+- Repository scanning and image discovery
+- Build state management with checkpoint/resume
+- Package verification (Cosign + Zarf)
+- Structured logging and metrics
+- Comprehensive test suite (96.8% coverage)
+
+**In Progress:**
+- kubespray-offline integration for OS packages and PyPI
+- Zarf package creation automation
+- Terraform provider mirroring
+- Full end-to-end build workflow
+
+**Planned:**
+- Binary distribution (PyInstaller)
 - Enhanced SBOM generation
+- Build determinism validation
+- Multi-architecture support
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## Requirements
 
 **Build Host (Zone A)**:
-- Ubuntu 24.04
-- 100GB+ free disk
+- Ubuntu 24.04 (or compatible Linux)
+- 100GB+ free disk space
 - Internet access
-- Python 3.10+, Git, Zarf CLI
+- Python 3.10+
+- Git 2.30+
+- Optional: Zarf CLI (for package creation)
 
 **Bastion (Zone C)**:
 - Ubuntu 24.04
-- 100GB+ free disk
+- 100GB+ free disk space
 - SSH access to target nodes
-- Ports 5000, 8080 open to target nodes
+- Ports 5000 (registry), 8080 (repos) open to target nodes
+- Zarf CLI installed
 
 **Target Nodes (Zone C)**:
 - Ubuntu 24.04
 - Network access to bastion
 - SSH access from bastion
+- Minimum 4 CPU, 8GB RAM per node
 
-See [System Requirements](docs/reference/system-requirements.md) for details.
+See [System Requirements](docs/reference/system-requirements.md) for detailed specifications.
 
 ## Security
 
