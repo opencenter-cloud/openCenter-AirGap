@@ -593,37 +593,35 @@ class GitOpsScanner:
     def resolve_helm_chart_url(release: HelmReleaseSpec, helm_repos: dict[str, str]) -> str | None:
         """Resolve full Helm chart URL from HelmRelease and repository mapping.
 
-        Supports both HTTP/HTTPS and OCI registries.
+        For HTTP/HTTPS repos, returns the repo URL (chart name passed separately to helm pull).
+        For OCI repos, returns the full OCI path including chart name.
 
         Args:
             release: HelmReleaseSpec with chart name and source reference
             helm_repos: Dictionary mapping repository names to URLs
 
         Returns:
-            Full chart URL (http/https/oci) or None if repository not found
+            Repo URL for HTTP/HTTPS, full OCI path for OCI, or None if repository not found
 
         Example:
             >>> release = HelmReleaseSpec(chart="nginx", source_ref="bitnami", version="1.0.0")
             >>> repos = {"bitnami": "https://charts.bitnami.com/bitnami"}
             >>> url = GitOpsScanner.resolve_helm_chart_url(release, repos)
             >>> print(url)
-            https://charts.bitnami.com/bitnami/nginx
+            https://charts.bitnami.com/bitnami
         """
         repo_url = helm_repos.get(release.source_ref)
         if not repo_url:
             return None
 
-        # OCI registry format: oci://registry/path
+        # OCI registry format: oci://registry/path/chart
         if repo_url.startswith("oci://"):
-            # OCI format: oci://registry/path/chart:version
+            # OCI format includes chart name in path
             chart_url = f"{repo_url.rstrip('/')}/{release.chart}"
-            if release.version:
-                chart_url = f"{chart_url}:{release.version}"
             return chart_url
 
-        # HTTP/HTTPS format: https://repo/path/chart-version.tgz
-        chart_url = f"{repo_url.rstrip('/')}/{release.chart}"
-        return chart_url
+        # HTTP/HTTPS format: return repo URL only (chart name passed to helm pull separately)
+        return repo_url
 
 
 class HelmChartImageExtractor:
@@ -759,7 +757,14 @@ class HelmChartImageExtractor:
 
         try:
             # Build helm pull command
-            cmd = ["helm", "pull", chart_url]
+            # For OCI: helm pull oci://registry/path/chart --version X
+            # For HTTP/HTTPS: helm pull chart --repo https://repo.url --version X
+            if chart_url.startswith("oci://"):
+                # OCI format: chart name already in URL
+                cmd = ["helm", "pull", chart_url]
+            else:
+                # HTTP/HTTPS format: chart name separate, repo URL via --repo
+                cmd = ["helm", "pull", release.chart, "--repo", chart_url]
 
             if release.version:
                 cmd.extend(["--version", release.version])
@@ -777,7 +782,9 @@ class HelmChartImageExtractor:
             )
 
             if result.returncode != 0:
-                logger.warning(f"helm pull failed for {chart_url}: {result.stderr.strip()}")
+                logger.warning(
+                    f"helm pull failed for {release.chart} from {chart_url}: {result.stderr.strip()}"
+                )
                 return None
 
             # Find the extracted chart directory
@@ -790,13 +797,13 @@ class HelmChartImageExtractor:
             return None
 
         except subprocess.TimeoutExpired:
-            logger.error(f"Timeout downloading chart: {chart_url}")
+            logger.error(f"Timeout downloading chart: {release.chart} from {chart_url}")
             return None
         except FileNotFoundError:
             logger.error("helm command not found. Please install Helm CLI.")
             return None
         except Exception as exc:
-            logger.error(f"Unexpected error downloading {chart_url}: {exc}")
+            logger.error(f"Unexpected error downloading {release.chart}: {exc}")
             return None
 
     def _scan_chart_for_images(self, chart_path: Path) -> set[str]:
