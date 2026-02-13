@@ -81,26 +81,7 @@ components:
         description: Create Terraform cache directory
       - cmd: 'echo "Terraform providers mirrored:" && ls -lh ###ZARF_VAR_INSTALL_PATH###/terraform-mirror/registry.terraform.io/ 2>/dev/null | head -10 || echo "No providers found"'
         description: Verify Terraform provider mirror
-# Component 3: kubespray-offline
-# Dependencies: None
-# Independence: Fully independent
-# Provides: K8s binaries, OS packages (debs), PyPI wheels, container images
-- name: kubespray-offline
-  description: Kubespray offline assets (binaries, packages, images)
-  required: true
-  files:
-  - source: build/kubespray-offline/outputs/
-    target: '###ZARF_VAR_INSTALL_PATH###/kubespray-offline/'
-    executable: false
-  actions:
-    onDeploy:
-      after:
-      - cmd: |
-          echo "Kubespray offline assets deployed:"
-          find ###ZARF_VAR_INSTALL_PATH###/kubespray-offline -type f | wc -l | xargs echo "Files:"
-          du -sh ###ZARF_VAR_INSTALL_PATH###/kubespray-offline | awk '{print "Size: " $1}'
-        description: Verify kubespray-offline assets
-# Component 4: kubespray-core
+# Component 3: kubespray-core
 # Dependencies: bootstrap-tools (logical, for Python venv used later by Kubespray)
 # Independence: Can deploy independently (only copies files, no runtime dependency)
 # Provides: Kubespray playbooks, K8s binaries, package repos
@@ -120,15 +101,16 @@ components:
   - source: assets/playbook/
     target: '###ZARF_VAR_INSTALL_PATH###/playbook/'
     executable: false
-# Component 5: k8s-images
+# Component 4: k8s-images
 # Dependencies: None
 # Independence: Fully independent, can deploy alone
 # Provides: Container images via Zarf's native image handling
+# Images are dynamically populated from config/all-images.txt during build
 - name: k8s-images
   description: Container images for Kubernetes and core services
   required: true
 ###IMAGES_BLOCK###
-# Component 6: operator-tools
+# Component 5: operator-tools
 # Dependencies: None
 # Independence: Fully independent, optional component
 # Provides: CLI tools for cluster operators (k9s, helm, stern, kubectx)
@@ -161,7 +143,7 @@ components:
           stern --version || echo "stern: $(stern --version 2>&1)"
           echo "kubectx/kubens: installed"
         description: Verify operator tools installation
-# Component 7: deploy-cluster
+# Component 6: deploy-cluster
 # Dependencies: bootstrap-tools (needs target-scripts), kubespray-core (needs playbooks)
 # Independence: Cannot deploy independently, requires prerequisites
 # Provides: Bastion setup orchestration (nginx, registry, Python venv)

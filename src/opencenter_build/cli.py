@@ -805,17 +805,6 @@ def build(
             versions = parse_versions_env(config_file)
             repos_to_clone = extract_repos_from_versions(versions)
 
-            # Add kubespray-offline if not in versions.env
-            kubespray_offline_spec = RepoSpec(
-                name="kubespray-offline",
-                url="https://github.com/kubespray-offline/kubespray-offline.git",
-                ref="develop",
-            )
-
-            # Check if kubespray-offline already in list
-            if not any(r.name == "kubespray-offline" for r in repos_to_clone):
-                repos_to_clone.append(kubespray_offline_spec)
-
             # Clone repositories
             repo_paths = []
             for repo_spec in repos_to_clone:
@@ -922,96 +911,104 @@ def build(
                 "images": str(len(helm_images)),
             }
 
-        def collect_kubespray_offline() -> dict[str, str]:
-            """Collect kubespray-offline assets."""
-            console.print("  [cyan]Collecting kubespray-offline assets...[/cyan]")
+        def generate_kubespray_lists() -> dict[str, str]:
+            """Generate Kubespray asset lists (images and files)."""
+            console.print("  [cyan]Generating Kubespray asset lists...[/cyan]")
 
-            # Check if kubespray-offline exists (should be cloned in scan_repositories)
-            kubespray_dir = Path("build/kubespray-offline")
+            # Check if kubespray exists
+            kubespray_dir = Path("build/kubespray")
             if not kubespray_dir.exists():
-                console.print(f"  [red]✗[/red] kubespray-offline not found at {kubespray_dir}")
-                return {"assets": "", "status": "error", "reason": "kubespray_offline_not_found"}
+                console.print(f"  [red]✗[/red] kubespray not found at {kubespray_dir}")
+                return {"lists": "", "status": "error", "reason": "kubespray_not_found"}
 
-            # Check if download-all.sh exists
-            download_script = kubespray_dir / "download-all.sh"
-            if not download_script.exists():
-                console.print(f"  [red]✗[/red] download-all.sh not found in {kubespray_dir}")
-                return {"assets": "", "status": "error", "reason": "download_script_not_found"}
+            # Check if generate_list.sh exists
+            generate_script = kubespray_dir / "contrib/offline/generate_list.sh"
+            if not generate_script.exists():
+                console.print(f"  [red]✗[/red] generate_list.sh not found in {kubespray_dir}")
+                return {"lists": "", "status": "error", "reason": "generate_script_not_found"}
 
-            # Inject discovered images into kubespray-offline imagelists
-            all_images_file = Path("config/all-images.txt")
-            if all_images_file.exists():
-                opencenter_images_file = kubespray_dir / "imagelists" / "opencenter-images.txt"
-                opencenter_images_file.parent.mkdir(parents=True, exist_ok=True)
-
-                # Copy all-images.txt to kubespray-offline imagelists
-                images = all_images_file.read_text().splitlines()
-                # Filter out empty lines and comments
-                images = [img.strip() for img in images if img.strip() and not img.startswith("#")]
-
-                opencenter_images_file.write_text("\n".join(images) + "\n")
-                console.print(
-                    f"  [green]✓[/green] Injected {len(images)} images into kubespray-offline"
-                )
-
-            # Check if outputs already exist
-            outputs_dir = kubespray_dir / "outputs"
-            if outputs_dir.exists():
-                # Count artifacts
-                file_count = sum(1 for _ in outputs_dir.rglob("*") if _.is_file())
-                if file_count > 0:
-                    console.print(
-                        f"  [green]✓[/green] Found {file_count} existing artifacts in {outputs_dir}"
-                    )
-                    return {
-                        "assets": str(outputs_dir),
-                        "status": "verified",
-                        "count": str(file_count),
-                    }
-
-            # Run download-all.sh
-            console.print(f"  [cyan]Running kubespray-offline download-all.sh...[/cyan]")
-            console.print(
-                f"  [yellow]⚠[/yellow] This may take 30-60 minutes and download 10GB+ of assets"
-            )
+            # Run generate_list.sh to create asset lists
+            console.print(f"  [cyan]Running kubespray generate_list.sh...[/cyan]")
 
             try:
                 import subprocess
 
                 result = subprocess.run(
-                    ["bash", str(download_script)],
-                    cwd=str(kubespray_dir),
+                    ["bash", str(generate_script)],
+                    cwd=str(kubespray_dir / "contrib/offline"),
                     capture_output=True,
                     text=True,
-                    timeout=7200,  # 2 hour timeout
+                    timeout=300,  # 5 minute timeout
                 )
 
                 if result.returncode != 0:
-                    console.print(f"  [red]✗[/red] kubespray-offline download failed")
+                    console.print(f"  [red]✗[/red] Kubespray list generation failed")
                     console.print(f"  [red]{result.stderr}[/red]")
-                    return {"assets": "", "status": "failed", "error": result.stderr}
+                    return {"lists": "", "status": "failed", "error": result.stderr}
 
-                # Verify outputs were created
-                if outputs_dir.exists():
-                    file_count = sum(1 for _ in outputs_dir.rglob("*") if _.is_file())
-                    console.print(f"  [green]✓[/green] Downloaded {file_count} artifacts")
-                    return {
-                        "assets": str(outputs_dir),
-                        "status": "downloaded",
-                        "count": str(file_count),
-                    }
-                else:
-                    console.print(
-                        f"  [yellow]⚠[/yellow] Download completed but outputs directory not found"
-                    )
-                    return {"assets": "", "status": "unknown"}
+                # Parse generated lists
+                temp_dir = kubespray_dir / "contrib/offline/temp"
+                images_list_file = temp_dir / "images.list"
+                files_list_file = temp_dir / "files.list"
+
+                if not images_list_file.exists() or not files_list_file.exists():
+                    console.print(f"  [red]✗[/red] Generated lists not found in {temp_dir}")
+                    return {"lists": "", "status": "error", "reason": "lists_not_generated"}
+
+                # Read kubespray images
+                kubespray_images = set()
+                for line in images_list_file.read_text().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        kubespray_images.add(line)
+
+                console.print(f"  [green]✓[/green] Found {len(kubespray_images)} Kubespray images")
+
+                # Read kubespray files
+                kubespray_files = []
+                for line in files_list_file.read_text().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        kubespray_files.append(line)
+
+                console.print(f"  [green]✓[/green] Found {len(kubespray_files)} Kubespray files")
+
+                # Merge kubespray images with existing all-images.txt
+                all_images_file = Path("config/all-images.txt")
+                existing_images = set()
+                if all_images_file.exists():
+                    existing_images = set(all_images_file.read_text().splitlines())
+
+                all_images = existing_images | kubespray_images
+                all_images_file.write_text("\n".join(sorted(all_images)) + "\n")
+
+                console.print(
+                    f"  [green]✓[/green] Updated {all_images_file} with {len(all_images)} total images"
+                )
+
+                # Write kubespray files to config/kubespray-files.txt
+                kubespray_files_output = Path("config/kubespray-files.txt")
+                kubespray_files_output.parent.mkdir(parents=True, exist_ok=True)
+                kubespray_files_output.write_text("\n".join(kubespray_files) + "\n")
+
+                console.print(
+                    f"  [green]✓[/green] Wrote {len(kubespray_files)} file URLs to {kubespray_files_output}"
+                )
+
+                return {
+                    "lists": str(temp_dir),
+                    "status": "generated",
+                    "images": str(len(kubespray_images)),
+                    "files": str(len(kubespray_files)),
+                    "total_images": str(len(all_images)),
+                }
 
             except subprocess.TimeoutExpired:
-                console.print(f"  [red]✗[/red] kubespray-offline download timed out after 2 hours")
-                return {"assets": "", "status": "timeout"}
+                console.print(f"  [red]✗[/red] Kubespray list generation timed out")
+                return {"lists": "", "status": "timeout"}
             except Exception as exc:
-                console.print(f"  [red]✗[/red] kubespray-offline download error: {exc}")
-                return {"assets": "", "status": "error", "error": str(exc)}
+                console.print(f"  [red]✗[/red] Kubespray list generation error: {exc}")
+                return {"lists": "", "status": "error", "error": str(exc)}
 
         def mirror_terraform_providers() -> dict[str, str]:
             """Mirror Terraform providers."""
@@ -1118,13 +1115,33 @@ def build(
             """Create Zarf package."""
             console.print("  [cyan]Creating Zarf package...[/cyan]")
 
-            # Generate zarf.yaml if needed
+            # Populate zarf.yaml with images from config/all-images.txt
             zarf_file = Path("zarf.yaml")
-            if not zarf_file.exists():
-                console.print("  [cyan]Generating zarf.yaml...[/cyan]")
-                generator = ZarfGenerator(config)
-                generator.generate(zarf_file)
-                console.print(f"  [green]✓[/green] Generated zarf.yaml")
+            all_images_file = Path("config/all-images.txt")
+
+            if all_images_file.exists():
+                console.print("  [cyan]Populating zarf.yaml with discovered images...[/cyan]")
+
+                # Read all images
+                images = []
+                for line in all_images_file.read_text().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        images.append(line)
+
+                # Generate images block
+                images_yaml = "  images:\n"
+                for image in sorted(images):
+                    images_yaml += f"  - {image}\n"
+
+                # Replace ###IMAGES_BLOCK### placeholder in zarf.yaml
+                zarf_content = zarf_file.read_text()
+                zarf_content = zarf_content.replace("###IMAGES_BLOCK###", images_yaml)
+                zarf_file.write_text(zarf_content)
+
+                console.print(f"  [green]✓[/green] Populated {len(images)} images in zarf.yaml")
+            else:
+                console.print(f"  [yellow]⚠[/yellow] No images file found at {all_images_file}")
 
             # Check if zarf CLI is available
             import shutil
@@ -1199,7 +1216,7 @@ def build(
 
         orchestrator.register_step_handler("scan_repositories", scan_repositories)
         orchestrator.register_step_handler("collect_helm_charts", collect_helm_charts)
-        orchestrator.register_step_handler("collect_kubespray_offline", collect_kubespray_offline)
+        orchestrator.register_step_handler("generate_kubespray_lists", generate_kubespray_lists)
         orchestrator.register_step_handler("mirror_terraform_providers", mirror_terraform_providers)
         orchestrator.register_step_handler("organize_assets", organize_assets)
         orchestrator.register_step_handler("create_zarf_package", create_zarf_package)

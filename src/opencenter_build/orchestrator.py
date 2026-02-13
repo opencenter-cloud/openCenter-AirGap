@@ -101,7 +101,7 @@ class BuildOrchestrator:
         self.steps = [
             "scan_repositories",
             "collect_helm_charts",
-            "collect_kubespray_offline",
+            "generate_kubespray_lists",
             "mirror_terraform_providers",
             "organize_assets",
             "create_zarf_package",
