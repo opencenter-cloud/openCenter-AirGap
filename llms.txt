@@ -1,0 +1,809 @@
+# openCenter AirGap
+
+> Build tool for creating air-gapped Kubernetes deployment packages. Collects container images, binaries, OS packages, and Python dependencies into a single cryptographically verifiable Zarf artifact for disconnected deployments.
+
+## Operator Guidance
+
+- Use `opencenter-build init` to create project structure with default versions.env
+- Edit config/versions.env to pin all component versions (single source of truth)
+- Run `opencenter-build build` to auto-generate components.yaml and create Zarf package
+- Use `opencenter-build scan --repos` to auto-discover images and charts from repositories
+- Verify packages with `opencenter-build verify --all` before transfer to air-gapped sites
+- Deploy on bastion host with `zarf package deploy` to serve local registry and repos
+- All builds are deterministic and cryptographically signed with Cosign
+
+## Installation
+
+### Prerequisites and Setup
+
+Source: openCenter-AirGap/README.md
+
+Install openCenter AirGap on a connected build host (Zone A) with Python 3.10+, Git, and 100GB+ free disk space.
+
+```bash
+# Clone repository
+git clone <repo-url>
+cd opencenter-airgap
+
+# Install package in development mode
+pip install -e .
+
+# Verify installation
+python3 -m opencenter_build.cli --help
+```
+
+### Development Installation
+
+Source: openCenter-AirGap/CONTRIBUTING.md
+
+Install with development dependencies for contributing code, including pytest, black, mypy, and pre-commit hooks.
+
+```bash
+# Install with development dependencies
+pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
+
+# Verify development environment
+pytest tests/unit/ -v
+black --check src/ tests/
+mypy src/
+```
+
+## Quickstart
+
+### Initialize and Build Package
+
+Source: openCenter-AirGap/README.md
+
+Create a new air-gap package by initializing the project, editing versions, and running the build command. The build auto-generates components.yaml from versions.env.
+
+```bash
+# 1. Initialize project (creates default versions.env)
+python3 -m opencenter_build.cli init
+
+# 2. Edit versions (single source of truth)
+vim config/versions.env
+
+# 3. Build (auto-generates components.yaml from versions.env)
+python3 -m opencenter_build.cli build
+
+# 4. Optional: Auto-discover images/charts from repos
+python3 -m opencenter_build.cli scan --repos
+```
+
+### Deploy Package in Air-Gap
+
+Source: openCenter-AirGap/README.md
+
+Transfer the Zarf package to disconnected site (Zone C) and deploy on bastion host to serve local registry and package repositories.
+
+```bash
+# On bastion host (requires Zarf CLI)
+zarf package deploy zarf-package-*.tar.zst --confirm
+
+# Verify deployment
+kubectl get nodes
+kubectl get pods -A
+```
+
+## Core Concepts
+
+### Three-Zone Air-Gap Model
+
+Source: openCenter-AirGap/README.md
+
+The deployment follows a three-zone security model: Zone A (Factory) downloads dependencies with internet access, Zone B (Airlock) handles physical media transfer, and Zone C (Field) deploys without internet connectivity.
+
+```
+Zone A: Factory (Connected)
+  ├── Download from internet
+  ├── Package into Zarf artifact
+  └── Generate SBOM and sign
+
+Zone B: Airlock (Physical Transfer)
+  └── USB, DVD, or secure courier
+
+Zone C: Field (Disconnected)
+  ├── Bastion serves local registry (port 5000)
+  ├── Bastion serves package repos (port 8080)
+  └── Target nodes pull from bastion only
+```
+
+### Component Manifest Auto-Generation
+
+Source: openCenter-AirGap/README.md
+
+The build command automatically generates components.yaml from versions.env. If versions.env is updated, the next build regenerates the manifest while preserving manual additions.
+
+```bash
+# Initial build generates components.yaml
+python3 -m opencenter_build.cli build
+
+# Add custom components after initial build
+python3 -m opencenter_build.cli add image custom-registry.io/app:v1.0
+python3 -m opencenter_build.cli add tool --name mytool --version v1.0 --url <url>
+
+# Rebuild preserves custom additions
+python3 -m opencenter_build.cli build
+
+# Force clean regeneration (loses manual edits)
+python3 -m opencenter_build.cli build --force-regenerate
+```
+
+### Bastion Architecture
+
+Source: openCenter-AirGap/README.md
+
+A bastion is a single node in the target environment that runs local registry (port 5000) and package repositories (port 8080). Target nodes pull all dependencies from bastion instead of internet.
+
+```bash
+# Bastion services after deployment
+curl http://localhost:5000/v2/_catalog  # Container registry
+curl http://localhost:8080/debs/        # APT repository
+```
+
+## Common Recipes
+
+### Add Container Images
+
+Source: openCenter-AirGap/docs/reference/cli-commands.md
+
+Add container images to the manifest for inclusion in the air-gap package.
+
+```bash
+# Add single image
+opencenter-build add image docker.io/library/nginx:1.25.0
+
+# Add image with digest (recommended for production)
+opencenter-build add image registry.k8s.io/kube-apiserver:v1.34.3 \
+  --digest sha256:abc123...
+```
+
+### Add Helm Charts
+
+Source: openCenter-AirGap/docs/reference/cli-commands.md
+
+Add Helm charts from repositories to deploy applications in the air-gapped cluster.
+
+```bash
+# Add Helm chart
+opencenter-build add chart ingress-nginx \
+  --version 4.7.0 \
+  --source https://kubernetes.github.io/ingress-nginx
+
+# Add cert-manager chart
+opencenter-build add chart cert-manager \
+  --version v1.13.0 \
+  --source https://charts.jetstack.io
+```
+
+### Add CLI Tools and Binaries
+
+Source: openCenter-AirGap/docs/reference/cli-commands.md
+
+Add command-line tools and Kubernetes binaries to the package for operator use.
+
+```bash
+# Add kubectl binary
+opencenter-build add tool \
+  --name kubectl \
+  --version v1.34.3 \
+  --url https://dl.k8s.io/release/v1.34.3/bin/linux/amd64/kubectl
+
+# Add Helm CLI
+opencenter-build add tool \
+  --name helm \
+  --version v3.14.0 \
+  --url https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz
+```
+
+### Scan Repositories for Components
+
+Source: openCenter-AirGap/docs/reference/cli-commands.md
+
+Auto-discover container images and Helm charts from Git repositories like Kubespray and GitOps repos.
+
+```bash
+# Clone repos from versions.env and scan
+opencenter-build scan --repos
+
+# Scan specific directory
+opencenter-build scan --repo build/kubespray
+
+# Scan multiple directories
+opencenter-build scan --repo build/kubespray --repo build/opencenter-gitops-base
+```
+
+### Resume Failed Build
+
+Source: openCenter-AirGap/docs/reference/cli-commands.md
+
+Resume a build from the last checkpoint if it failed due to network issues or other transient errors.
+
+```bash
+# Resume from last checkpoint
+opencenter-build build --resume
+
+# Clean build (remove work directory first)
+opencenter-build build --clean
+```
+
+### Verify Package Integrity
+
+Source: openCenter-AirGap/docs/reference/cli-commands.md
+
+Verify package checksum, cryptographic signature, and SBOM before transferring to air-gapped site.
+
+```bash
+# Verify checksum
+opencenter-build verify dist/zarf-package-*.tar.zst --checksum
+
+# Verify signature (requires public key)
+opencenter-build verify dist/zarf-package-*.tar.zst --signature
+
+# Full verification (all checks)
+opencenter-build verify dist/zarf-package-*.tar.zst --all
+```
+
+## Configuration
+
+### Version Configuration (versions.env)
+
+Source: openCenter-AirGap/config/versions.env
+
+The versions.env file is the single source of truth for all component versions. Edit this file to pin Kubernetes, container runtime, and application versions.
+
+```bash
+# Kubernetes versions
+KUBERNETES_VERSION="v1.34.3"
+KUBESPRAY_VERSION="master"
+
+# Container runtime
+CONTAINERD_VERSION="2.1.5"
+RUNC_VERSION="1.3.4"
+CNI_VERSION="1.8.0"
+CALICO_VERSION="v3.31.3"
+
+# Core services
+FLUXCD_VERSION="v2.7.5"
+GITEA_VERSION="v1.25.4"
+CERT_MANAGER_VERSION="v1.16.2"
+INGRESS_NGINX_VERSION="v1.9.0"
+
+# Operator tools
+KUBECTL_VERSION="v1.34.3"
+HELM_VERSION="v4.0.5"
+K9S_VERSION="v0.50.9"
+
+# Terraform
+TERRAFORM_VERSION="1.14.0"
+OPENSTACK_PROVIDER_VERSION="2.1.0"
+```
+
+### Component Manifest Schema
+
+Source: openCenter-AirGap/docs/reference/component-manifest-schema.md
+
+The components.yaml manifest defines what gets packaged. It is auto-generated from versions.env but can be customized with manual additions.
+
+```yaml
+apiVersion: v1
+metadata:
+  name: opencenter-airgap
+  version: 1.0.0
+  description: Air-gapped Kubernetes deployment package
+
+components:
+  # Container images
+  - name: registry
+    type: image
+    image: docker.io/library/registry:2.8.3
+    digest: sha256:a1b2c3d4e5f6...
+    platform: linux/amd64
+
+  # Helm charts
+  - name: cert-manager
+    type: chart
+    repository: https://charts.jetstack.io
+    chart: cert-manager
+    version: v1.13.0
+    values:
+      installCRDs: true
+
+  # Binaries
+  - name: kubectl
+    type: binary
+    url: https://dl.k8s.io/release/v1.34.3/bin/linux/amd64/kubectl
+    checksum: sha256:abc123...
+    destination: /usr/local/bin/kubectl
+    mode: "0755"
+
+  # Repositories
+  - name: kubespray
+    type: repository
+    url: https://github.com/kubernetes-sigs/kubespray.git
+    ref: v2.24.0
+    destination: /opt/opencenter/kubespray
+```
+
+### Node Inventory Configuration
+
+Source: openCenter-AirGap/examples/nodes-baremetal.yaml
+
+Define cluster topology for Kubespray deployment with control plane and worker nodes.
+
+```yaml
+control_plane:
+  - hostname: control-01
+    ip: 192.168.1.10
+  - hostname: control-02
+    ip: 192.168.1.11
+  - hostname: control-03
+    ip: 192.168.1.12
+
+workers:
+  - hostname: worker-01
+    ip: 192.168.1.20
+  - hostname: worker-02
+    ip: 192.168.1.21
+  - hostname: worker-03
+    ip: 192.168.1.22
+```
+
+### Zarf Package Variables
+
+Source: openCenter-AirGap/zarf.yaml
+
+Configure deployment variables for Zarf package including bastion IP, SSH user, and service ports.
+
+```yaml
+variables:
+- name: DEPLOYMENT_MODE
+  description: 'Deployment mode: baremetal or openstack'
+  default: baremetal
+  prompt: false
+
+- name: BASTION_IP
+  description: IP address of bastion host
+  default: ""
+  prompt: true
+
+- name: SSH_USER
+  description: SSH user for node access
+  default: deployer
+  prompt: false
+
+- name: REGISTRY_PORT
+  description: Local registry port
+  default: '35000'
+  prompt: false
+```
+
+## API Patterns
+
+### Python CLI Module Usage
+
+Source: openCenter-AirGap/src/opencenter_build/cli.py
+
+Import and use openCenter build modules programmatically for custom build workflows.
+
+```python
+from opencenter_build.config import load_versions_env, BuildConfig
+from opencenter_build.validation import ConfigValidator
+from pathlib import Path
+
+# Load version configuration
+versions = load_versions_env(Path("config/versions.env"))
+
+# Create build configuration
+config = BuildConfig(
+    config_file=Path("config/versions.env"),
+    output_dir=Path("dist"),
+    work_dir=Path("build"),
+    parallel_workers=4
+)
+
+# Validate configuration
+validator = ConfigValidator(Path("config/schemas"))
+validator.validate_versions_env(versions)
+```
+
+### Image Reference Parsing
+
+Source: openCenter-AirGap/src/opencenter_build/image_utils.py
+
+Parse and normalize container image references for registry operations.
+
+```python
+from opencenter_build.image_utils import parse_image_reference, normalize_image_reference
+
+# Parse image reference
+ref = parse_image_reference("docker.io/library/nginx:1.25.0")
+print(ref.registry)    # docker.io
+print(ref.repository)  # library/nginx
+print(ref.tag)         # 1.25.0
+
+# Normalize image reference
+normalized = normalize_image_reference("nginx:1.25.0")
+print(normalized)  # docker.io/library/nginx:1.25.0
+```
+
+### Build State Management
+
+Source: openCenter-AirGap/src/opencenter_build/state.py
+
+Manage build state with atomic operations and checkpoint/resume support.
+
+```python
+from opencenter_build.state import StateManager
+from pathlib import Path
+
+# Initialize state manager
+state_mgr = StateManager(Path("build/state.json"))
+
+# Write state atomically
+state_mgr.write({
+    "phase": "ASSET_COLLECTION",
+    "progress": {"images": 45, "total": 120}
+})
+
+# Read current state
+state = state_mgr.read()
+print(state["phase"])  # ASSET_COLLECTION
+```
+
+### Logging Configuration
+
+Source: openCenter-AirGap/src/opencenter_build/logging.py
+
+Configure structured logging with JSON output and trace IDs for build operations.
+
+```python
+from opencenter_build.logging import setup_logging, get_logger, set_trace_id
+import logging
+
+# Setup logging
+setup_logging(
+    level=logging.INFO,
+    log_file="build.log",
+    json_output=True
+)
+
+# Get logger
+logger = get_logger(__name__)
+
+# Set trace ID for request tracking
+trace_id = set_trace_id()
+logger.info("Starting build", extra={"trace_id": trace_id})
+```
+
+## Troubleshooting
+
+### Connection Timeout During Download
+
+Source: openCenter-AirGap/docs/reference/troubleshooting.md
+
+Network timeouts during asset download can be caused by firewall rules or proxy configuration.
+
+```bash
+# Check connectivity
+curl -I https://registry.k8s.io
+curl -I https://github.com
+
+# Configure proxy if needed
+export HTTP_PROXY=http://proxy.example.com:8080
+export HTTPS_PROXY=http://proxy.example.com:8080
+opencenter-build build
+```
+
+### Disk Space Exhausted
+
+Source: openCenter-AirGap/docs/reference/troubleshooting.md
+
+Build requires 100GB+ disk space. Clean previous builds or use external volume.
+
+```bash
+# Check disk usage
+df -h build/ dist/
+du -sh build/* | sort -h
+
+# Clean previous builds
+opencenter-build build --clean
+
+# Use external volume
+opencenter-build build \
+  --work-dir /mnt/large-disk/build \
+  --output-dir /mnt/large-disk/dist
+```
+
+### Registry Fails to Start on Bastion
+
+Source: openCenter-AirGap/docs/reference/troubleshooting.md
+
+Registry container may fail if port 5000 is in use or insufficient disk space.
+
+```bash
+# Check registry logs
+podman logs registry
+
+# Check port availability
+lsof -i :5000
+
+# Check disk space
+df -h /opt/opencenter
+
+# Fix permissions
+sudo chown -R $(whoami):$(whoami) /opt/opencenter/images
+```
+
+### Pods Stuck in ImagePullBackOff
+
+Source: openCenter-AirGap/docs/reference/troubleshooting.md
+
+Nodes may fail to pull images if containerd is not configured to use bastion registry.
+
+```bash
+# Check containerd config on node
+ssh node1 "cat /etc/containerd/config.toml | grep registry"
+
+# Expected configuration
+[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+  endpoint = ["http://BASTION_IP:5000"]
+
+# Verify registry is reachable
+ssh node1 "curl http://BASTION_IP:5000/v2/_catalog"
+
+# Restart containerd
+ssh node1 "sudo systemctl restart containerd"
+```
+
+### Ansible Fails with Unreachable Host
+
+Source: openCenter-AirGap/docs/reference/troubleshooting.md
+
+SSH connectivity issues can prevent Ansible from reaching target nodes.
+
+```bash
+# Test SSH manually
+ssh -i ~/.ssh/id_rsa user@node1
+
+# Add SSH key to agent
+eval $(ssh-agent)
+ssh-add ~/.ssh/id_rsa
+
+# Disable host key checking (first run only)
+export ANSIBLE_HOST_KEY_CHECKING=False
+ansible-playbook -i inventory.yml cluster.yml
+```
+
+### Resume Failed Build
+
+Source: openCenter-AirGap/docs/reference/troubleshooting.md
+
+Resume build from last checkpoint if it failed due to transient errors.
+
+```bash
+# Resume from last checkpoint
+opencenter-build build --resume
+
+# Check build status
+opencenter-build status
+
+# Delete state to start fresh
+rm build/state.json
+opencenter-build build
+```
+
+## Security Notes
+
+### Cryptographic Signing and Verification
+
+Source: openCenter-AirGap/SECURITY.md
+
+All packages are cryptographically signed with Cosign for authenticity verification before deployment.
+
+```bash
+# Sign package (build host)
+cosign sign --key ~/.opencenter/cosign.key zarf-package-*.tar.zst
+
+# Verify signature (air-gap site)
+cosign verify --key ~/.opencenter/cosign.pub zarf-package-*.tar.zst
+
+# Verify with opencenter-build
+opencenter-build verify dist/zarf-package-*.tar.zst --signature
+```
+
+### Secrets Management
+
+Source: openCenter-AirGap/SECURITY.md
+
+Secrets are managed via file-based injection with strict permissions, never committed to git.
+
+```bash
+# Create secrets directory
+mkdir -p .secrets
+chmod 700 .secrets
+
+# Add secret file
+echo "ghp_xxxxxxxxxxxx" > .secrets/github-token
+chmod 600 .secrets/github-token
+
+# Use in code
+from opencenter_build.secrets import SecretsManager
+secrets = SecretsManager(Path(".secrets"))
+token = secrets.get_secret("github-token")
+```
+
+### Image Vulnerability Scanning
+
+Source: openCenter-AirGap/SECURITY.md
+
+Trivy scans all container images for HIGH/CRITICAL CVEs during build phase.
+
+```bash
+# Scan images during build (automatic)
+opencenter-build build
+
+# View scan results
+cat build/image-scan-results.json | jq '.[] | select(.severity == "CRITICAL")'
+
+# Build fails on CRITICAL CVEs by default
+# Override with --skip-scanning (not recommended)
+```
+
+### SBOM Generation
+
+Source: openCenter-AirGap/SECURITY.md
+
+Complete software bill of materials (SBOM) is generated for every build and included in Zarf package.
+
+```bash
+# SBOM generated automatically during build
+opencenter-build build
+
+# View SBOM
+jq '.artifacts[] | select(.name == "kubectl")' dist/zarf-package-*-sbom.json
+
+# Verify SBOM
+opencenter-build verify dist/zarf-package-*.tar.zst --sbom
+```
+
+### Dependency Pinning
+
+Source: openCenter-AirGap/SECURITY.md
+
+All versions are locked to commit SHAs in versions.env for supply chain security.
+
+```bash
+# Pin specific commit SHA
+KUBESPRAY_COMMIT_SHA="a1b2c3d4e5f6..."
+OPENCENTER_GITOPS_BASE_COMMIT_SHA="f6e5d4c3b2a1..."
+
+# Verify checksums
+cat build/asset-checksums.json | jq '.[] | select(.name == "kubectl")'
+```
+
+## Examples
+
+### Complete Build Workflow
+
+Source: openCenter-AirGap/README.md
+
+End-to-end workflow from initialization to package creation with version pinning and verification.
+
+```bash
+# 1. Initialize project
+opencenter-build init my-airgap-project
+cd my-airgap-project
+
+# 2. Edit versions
+cat > config/versions.env << EOF
+KUBERNETES_VERSION="v1.34.3"
+CONTAINERD_VERSION="2.1.5"
+FLUXCD_VERSION="v2.7.5"
+CERT_MANAGER_VERSION="v1.16.2"
+EOF
+
+# 3. Build package
+opencenter-build build
+
+# 4. Verify package
+opencenter-build verify dist/zarf-package-*.tar.zst --all
+
+# 5. Check build status
+opencenter-build status
+```
+
+### Custom Component Addition
+
+Source: openCenter-AirGap/examples/components.yaml
+
+Add custom images, charts, and tools to the auto-generated manifest.
+
+```bash
+# Add custom application image
+opencenter-build add image ghcr.io/myorg/myapp:v1.2.3
+
+# Add custom Helm chart
+opencenter-build add chart myapp \
+  --version 1.2.3 \
+  --source https://charts.myorg.com
+
+# Add custom CLI tool
+opencenter-build add tool \
+  --name myctl \
+  --version v1.0.0 \
+  --url https://releases.myorg.com/myctl-v1.0.0-linux-amd64
+
+# Rebuild with custom additions
+opencenter-build build
+```
+
+### OpenStack Deployment
+
+Source: openCenter-AirGap/examples/openstack-config.yaml
+
+Initialize project with OpenStack template for VM-based deployments with Terraform.
+
+```bash
+# Initialize with OpenStack template
+opencenter-build init --template openstack
+
+# Edit OpenStack configuration
+vim config/openstack-config.yaml
+
+# Build includes Terraform providers
+opencenter-build build
+
+# Deploy to OpenStack
+cd /opt/opencenter/terraform
+terraform init
+terraform apply
+```
+
+### Development Testing
+
+Source: openCenter-AirGap/CONTRIBUTING.md
+
+Run tests with coverage reporting and type checking for development contributions.
+
+```bash
+# Run unit tests
+pytest tests/unit/ -v
+
+# Run with coverage
+pytest --cov=src --cov-report=term-missing --cov-report=html
+
+# Type checking
+mypy src/
+
+# Linting
+pylint src/
+black --check src/ tests/
+
+# Run all checks
+make test lint
+```
+
+### Multi-Site Deployment
+
+Source: openCenter-AirGap/README.md
+
+Build once and deploy identical packages to multiple edge sites for consistency.
+
+```bash
+# Build package once
+opencenter-build build
+sha256sum dist/zarf-package-*.tar.zst > package.sha256
+
+# Copy to multiple sites
+for site in site1 site2 site3; do
+  scp dist/zarf-package-*.tar.zst $site:/tmp/
+  scp package.sha256 $site:/tmp/
+done
+
+# Deploy at each site
+ssh site1 "cd /tmp && sha256sum -c package.sha256 && zarf package deploy zarf-package-*.tar.zst --confirm"
+```
