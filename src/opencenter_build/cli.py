@@ -1707,7 +1707,7 @@ def clean(
 
     try:
         # List items to delete
-        items_to_delete = []
+        items_to_delete: list[tuple[str, Path] | tuple[str, Path, int]] = []
 
         if state_file.exists():
             items_to_delete.append(("State file", state_file))

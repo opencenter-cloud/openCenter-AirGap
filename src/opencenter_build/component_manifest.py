@@ -209,7 +209,7 @@ class ComponentManifest:
         Returns:
             Dictionary representation
         """
-        data = {}
+        data: dict[str, Any] = {}
 
         # Include metadata if present
         if self._generated:
@@ -225,7 +225,7 @@ class ComponentManifest:
             data["repositories"] = [asdict(repo) for repo in self.repositories]
 
         if self.images.auto_discover or self.images.additional:
-            images_data = {}
+            images_data: dict[str, Any] = {}
             if self.images.auto_discover:
                 images_data["auto_discover"] = [asdict(disc) for disc in self.images.auto_discover]
             if self.images.additional:

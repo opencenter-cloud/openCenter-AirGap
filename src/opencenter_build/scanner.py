@@ -17,7 +17,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Pattern
+from typing import Any, Pattern
 
 from opencenter_build.exceptions import ScanError
 
@@ -563,9 +563,7 @@ class GitOpsScanner:
                 f.write(f"{name}={url}\n")
 
     @staticmethod
-    def write_helm_charts_file(
-        releases: list[HelmReleaseSpec], output_path: Path
-    ) -> None:
+    def write_helm_charts_file(releases: list[HelmReleaseSpec], output_path: Path) -> None:
         """Write Helm chart list to file.
 
         Creates a text file with format:
@@ -600,7 +598,7 @@ class GitOpsScanner:
         Returns:
             List of HelmReleaseSpec objects
         """
-        releases = []
+        releases: list[HelmReleaseSpec] = []
 
         if not input_path.exists():
             return releases
@@ -635,7 +633,7 @@ class GitOpsScanner:
         Returns:
             Dictionary mapping repository name to URL
         """
-        helm_repos = {}
+        helm_repos: dict[str, str] = {}
 
         if not input_path.exists():
             return helm_repos
@@ -915,7 +913,7 @@ class HelmChartImageExtractor:
         Returns:
             Set of image references
         """
-        images = set()
+        images: set[str] = set()
 
         try:
             with open(yaml_file) as f:
@@ -934,7 +932,9 @@ class HelmChartImageExtractor:
 
         return images
 
-    def _extract_images_from_dict(self, data: dict | list | str, images: set[str]) -> None:
+    def _extract_images_from_dict(
+        self, data: dict[str, Any] | list[Any] | str, images: set[str]
+    ) -> None:
         """Recursively extract image references from nested dict/list.
 
         Args:
