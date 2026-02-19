@@ -1,247 +1,609 @@
-**doc_type: explanation**
-**audience: Platform Engineers, Architects**
+---
+doc_type: explanation
+audience: Platform Engineers, Architects
+scope: High-level system design, rationale, and architectural decisions
+---
 
 # Architecture Overview
 
-This document explains the design of openCenter AirGap: why it's structured this way, what problems it solves, and what trade-offs were made.
+This document explains the high-level architecture of openCenter AirGap, the rationale behind key design decisions, and how components interact to enable air-gapped Kubernetes deployments.
 
-## The Air-Gap Problem
+## Purpose
 
-Deploying Kubernetes in disconnected environments hits three constraints:
+**Purpose**: For platform engineers and architects, explains the system design of openCenter AirGap, covering the three-zone model, component architecture, and design trade-offs.
 
-1. **No internet during deployment**: Target nodes can't pull from Docker Hub, apt repos, or PyPI
-2. **Reproducibility**: Same artifact must produce identical clusters across sites
-3. **Verification**: Security teams need to audit what's being deployed before it crosses the air-gap
+## System Context
 
-Traditional deployment tools assume internet access. They download dependencies on-demand, which breaks in disconnected environments. Workarounds like "just mirror everything" create operational burden and version drift.
+openCenter AirGap solves a specific problem: deploying production Kubernetes clusters in environments with no internet connectivity. This constraint drives the entire architecture.
 
-## Design Principles
+**The Challenge**: A typical Kubernetes deployment pulls hundreds of container images, OS packages, Python libraries, and binaries from the internet. In air-gapped environments (military, financial, healthcare, edge computing), this is impossible.
 
-**Single Artifact**: One file contains everything. No "step 1: download this, step 2: download that." The artifact is the deployment.
+**The Solution**: Collect all dependencies in a connected environment (Zone A), package them into a single artifact, physically transfer to the disconnected environment (Zone C), and deploy using local mirrors.
 
-**Build Once, Deploy Many**: Build in a connected environment, deploy to N disconnected sites. The build process is expensive (downloads, scanning, packaging). Deployment is cheap (extract, serve, install).
-
-**Cryptographic Verification**: SBOM and signatures travel with the artifact. Security officers verify before deployment, not after.
-
-**Bastion as Local Mirror**: One node in the target environment serves as registry and package repository. Target nodes pull from bastion, not internet. This keeps the deployment model simple: nodes still use standard tools (apt, pip, containerd), just pointed at local sources.
+**Evidence**: `README.md:What This Is`, `README.md:Three-Zone Model`
 
 ## Three-Zone Architecture
 
-### Zone A: Factory (Connected)
-
-This is where the artifact is built. It has internet access and runs the build tooling.
-
-**Components**:
-- Build host (Ubuntu 24.04, 100GB+ disk)
-- opencenter-build (Python CLI)
-- kubespray-offline (asset discovery)
-- Zarf (packaging framework)
-
-**Process**:
-1. Read component manifest (what to include)
-2. Clone kubespray-offline
-3. Run asset collection (downloads images, packages, binaries)
-4. Collect Terraform providers (OpenStack only)
-5. Create Zarf package (compress, SBOM, sign)
-
-**Output**: `zarf-package-*.tar.zst` (~25GB compressed)
-
-**Why this works**: All downloads happen once, in a controlled environment. Build failures are caught before the artifact crosses the air-gap. The build is deterministic: same inputs produce same outputs.
-
-### Zone B: Airlock (Transfer)
-
-Physical media transfer. USB drive, DVD, secure courier, or approved file transfer mechanism.
-
-**Why this exists**: Regulated environments have formal processes for moving data across security boundaries. The artifact is self-contained and verifiable, so it fits into existing approval workflows.
-
-### Zone C: Field (Disconnected)
-
-This is the target environment. No internet access. The artifact is deployed here.
-
-**Components**:
-- Bastion host (Ubuntu 24.04, 100GB+ disk)
-- Target nodes (3+ Ubuntu 24.04 nodes)
-- Zarf CLI (pre-installed on bastion)
-
-**Process**:
-1. Copy artifact to bastion
-2. Deploy Zarf package (extracts to `/opt/opencenter/`)
-3. Start local services (registry on 5000, nginx on 8080)
-4. Configure target nodes to use bastion repos
-5. Run Kubespray to install Kubernetes
-6. Deploy FluxCD and core services
-
-**Why this works**: Bastion serves as a local mirror. Target nodes use standard tools (apt, containerd) but pull from bastion instead of internet. No custom agents or proprietary protocols. If a node needs a package, it's already on the bastion.
-
-## Component Interaction
+The system operates across three distinct security zones:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Build Phase (Zone A)                                        │
-│                                                              │
-│  Component Manifest                                         │
-│         │                                                    │
-│         ▼                                                    │
-│  opencenter-build ──▶ kubespray-offline ──▶ Asset Cache    │
-│         │                                                    │
-│         ▼                                                    │
-│  Zarf Package Creator ──▶ SBOM Generator ──▶ Signer        │
-│         │                                                    │
-│         ▼                                                    │
-│  zarf-package-*.tar.zst                                     │
+│ Zone A: Factory (Connected)                                 │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
+│  │ Build Host   │───▶│ openCenter   │───▶│ Zarf Package │   │
+│  │ (internet)   │    │ Build System │    │ (.tar.zst)   │   │
+│  └──────────────┘    └──────────────┘    └──────────────┘   │
+│         │                     │                             │
+│         ▼                     ▼                             │
+│  Downloads from          Collects into                      │
+│  public sources          single artifact                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ Physical Transfer (USB, DVD, Courier)
+┌─────────────────────────────────────────────────────────────┐
+│ Zone B: Airlock (Transfer)                                  │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
+│  │ Security     │───▶│ Verification │───▶│ Approved     │   │
+│  │ Scan         │    │ (SBOM, sig)  │    │ Transfer     │   │
+│  └──────────────┘    └──────────────┘    └──────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼ Physical Transfer
 ┌─────────────────────────────────────────────────────────────┐
-│ Deploy Phase (Zone C)                                       │
-│                                                              │
-│  Bastion Host                                               │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │ Zarf Extract ──▶ /opt/opencenter/                     │ │
-│  │                                                        │ │
-│  │ Registry (5000) ◀── images/                           │ │
-│  │ Nginx (8080)    ◀── debs/, pypi/, files/              │ │
-│  └────────────────────────────────────────────────────────┘ │
-│         │                                                    │
-│         ▼ SSH + Ansible                                     │
-│  Target Nodes                                               │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │ apt ──▶ bastion:8080/debs/                            │ │
-│  │ pip ──▶ bastion:8080/pypi/                            │ │
-│  │ containerd ──▶ bastion:5000/                          │ │
-│  │                                                        │ │
-│  │ Kubernetes Cluster                                     │ │
-│  └────────────────────────────────────────────────────────┘ │
+│ Zone C: Field (Disconnected)                                │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
+│  │ Bastion      │───▶│ Cluster      │───▶│ Workloads    │   │
+│  │ (registry +  │    │ Nodes        │    │ (apps)       │   │
+│  │  repos)      │    │ (K8s)        │    │              │   │
+│  └──────────────┘    └──────────────┘    └──────────────┘   │
+│         │                     │                             │
+│         ▼                     ▼                             │
+│  Serves local            Pulls from                         │
+│  mirrors                 bastion only                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+**Evidence**: `README.md:Architecture`, `README.md:Three-Zone Model`
+
+### Zone A: Factory (Connected)
+
+**Role**: Build and package all dependencies
+
+**Components**:
+- Build host with internet access
+- openCenter build system (Python CLI)
+- Dependency collectors (kubespray-offline, image scanners)
+- Zarf packaging tool
+
+**Inputs**:
+- `config/versions.env` - Version specifications
+- `config/components.yaml` - Component manifest (auto-generated)
+- Public package sources (registries, repositories, GitHub)
+
+**Outputs**:
+- `dist/zarf-package-*.tar.zst` - Complete deployment package (~25 GB)
+- `dist/zarf-package-*-sbom.json` - Software Bill of Materials
+- `dist/zarf-package-*.sha256` - Checksum file
+
+**Evidence**: `src/opencenter_build/cli.py:build()`, `src/opencenter_build/orchestrator.py`
+
+### Zone B: Airlock (Transfer)
+
+**Role**: Security verification and controlled transfer
+
+**Components**:
+- Security scanning tools (Trivy, Cosign)
+- SBOM validation
+- Approval workflow
+
+**Process**:
+1. Scan package for CVEs
+2. Verify cryptographic signature
+3. Validate SBOM against policy
+4. Approve transfer to Zone C
+
+**Evidence**: `src/opencenter_build/verifier.py`, `SECURITY.md`
+
+### Zone C: Field (Disconnected)
+
+**Role**: Deploy and operate Kubernetes cluster
+
+**Components**:
+- Bastion host (registry + file server)
+- Cluster nodes (control plane + workers)
+- Kubernetes workloads
+
+**Process**:
+1. Deploy Zarf package to bastion
+2. Start local registry and file server
+3. Configure cluster nodes to use bastion
+4. Deploy Kubernetes with Kubespray
+5. Deploy applications via FluxCD
+
+**Evidence**: `zarf.yaml:components`, `src/opencenter_build/cli.py:serve()`
+
+## Component Architecture
+
+### Build System Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ CLI Layer (Typer + Rich)                                    │
+│  - User interface                                           │
+│  - Command routing                                          │
+│  - Progress display                                         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Orchestration Layer                                         │
+│  - BuildOrchestrator: Step execution                        │
+│  - StateManager: Checkpoint/resume                          │
+│  - TransactionManager: Rollback support                     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Business Logic Layer                                        │
+│  - ComponentManifest: Manifest management                   │
+│  - RepositoryScanner: Image/chart discovery                 │
+│  - ZarfGenerator: zarf.yaml generation                      │
+│  - ManifestGenerator: Artifact manifest                     │
+│  - PackageVerifier: Integrity checks                        │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Infrastructure Layer                                        │
+│  - ConfigLoader: versions.env parsing                       │
+│  - SecretsManager: File-based secrets                       │
+│  - Logging: Structured logging                              │
+│  - Metrics: Build telemetry                                 │
+│  - Validation: Schema validation                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Evidence**: `src/opencenter_build/` directory structure
+
+### Deployment Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Zarf Package                                                │
+│  - Component: bootstrap-tools (Python venv, scripts)        │
+│  - Component: terraform-providers (OpenStack only)          │
+│  - Component: kubespray-core (playbooks, binaries, repos)   │
+│  - Component: k8s-images (container images)                 │
+│  - Component: operator-tools (kubectl, helm, k9s)           │
+│  - Component: deploy-cluster (orchestration)                │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ zarf package deploy
+┌─────────────────────────────────────────────────────────────┐
+│ Bastion Services                                            │
+│  - Container registry (port 5000)                           │
+│  - Nginx file server (port 8080)                            │
+│  - Gitea (port 3000, optional)                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ ansible-playbook
+┌─────────────────────────────────────────────────────────────┐
+│ Kubernetes Cluster                                          │
+│  - Control plane (etcd, API server, scheduler, controller)  │
+│  - Workers (kubelet, kube-proxy, containerd)                │
+│  - CNI (Calico)                                             │
+│  - FluxCD (GitOps)                                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Evidence**: `zarf.yaml:components`, `README.md:Architecture`
+
 ## Key Design Decisions
 
-### Why Zarf?
+### 1. Why Zarf for Packaging
 
-Zarf provides:
-- Declarative packaging (zarf.yaml manifest)
-- SBOM generation (tracks every component)
-- Cryptographic signing (Cosign integration)
-- Compression (tar.zst, ~40% smaller than tar.gz)
-- Component-based structure (easy to add/remove pieces)
+**Decision**: Use Zarf as the packaging framework instead of custom tar archives or Docker images.
 
-Alternative considered: Custom tar + manifest. Rejected because we'd be reimplementing SBOM, signing, and compression. Zarf is maintained by the CNCF and used in production by DoD projects.
+**Rationale**:
+- **Declarative manifest**: `zarf.yaml` defines components, dependencies, and deployment actions
+- **Built-in registry**: Zarf includes a container registry for air-gap deployments
+- **SBOM generation**: Automatic software bill of materials
+- **Cryptographic signing**: Cosign integration for package integrity
+- **Component independence**: Deploy only what you need
+- **Community support**: Active project with DoD backing
 
-### Why Kubespray?
+**Trade-offs**:
+- **Dependency**: Requires Zarf CLI on bastion
+- **Learning curve**: Zarf-specific concepts and syntax
+- **Package size**: Zarf adds ~500 MB overhead
 
-Kubespray is Ansible-based, which means:
-- Readable playbooks (no compiled binaries)
-- Idempotent (safe to re-run)
-- Extensible (add custom tasks)
-- Well-tested (used by CNCF, large enterprises)
+**Evidence**: `zarf.yaml`, `README.md:What This Is`, Zarf documentation
 
-Alternative considered: kubeadm directly. Rejected because Kubespray handles OS-level setup (kernel params, firewall, swap), HA control plane, and CNI installation. Doing this manually is error-prone.
+### 2. Python for Build System
 
-### Why kubespray-offline?
+**Decision**: Implement build system in Python instead of pure Bash.
 
-kubespray-offline discovers dependencies by parsing Kubespray playbooks and Helm charts. It generates lists of:
-- Container images (from Helm values, Kubespray defaults)
-- OS packages (from Kubespray package lists)
-- Python wheels (from Kubespray requirements.txt)
-- Kubernetes binaries (from Kubespray version matrix)
+**Rationale**:
+- **Structured data**: JSON/YAML parsing with jsonschema validation
+- **Error handling**: Exception hierarchy with context
+- **State management**: Atomic file operations with rollback
+- **Testing**: Property-based testing with hypothesis
+- **Type safety**: mypy strict mode for correctness
+- **Maintainability**: Clear module boundaries and interfaces
 
-Alternative considered: Manual lists. Rejected because they drift when Kubespray updates. kubespray-offline stays in sync automatically.
+**Trade-offs**:
+- **Runtime dependency**: Requires Python 3.10+
+- **Startup time**: Slower than Bash for simple scripts
+- **Deployment**: More complex than single Bash script
 
-### Why Bastion Model?
+**Evidence**: `src/opencenter_build/`, `pyproject.toml`, `CONTRIBUTING.md:Language Selection`
 
-The bastion serves as a local mirror. This keeps the deployment model simple:
-- Nodes use standard tools (apt, pip, containerd)
-- No custom agents or proprietary protocols
-- Easy to troubleshoot (curl, apt-cache policy, etc.)
-- Works with existing automation (Ansible, Terraform)
+### 3. Auto-Generated Component Manifest
 
-Alternative considered: Pre-load every node with all packages. Rejected because:
-- Wastes disk space (each node has 25GB of packages it won't use)
-- Complicates updates (have to touch every node)
-- Breaks standard tooling (apt expects a repository, not a local directory)
+**Decision**: Auto-generate `components.yaml` from `versions.env` instead of manual editing.
 
-### Why Python CLI?
+**Rationale**:
+- **Single source of truth**: `versions.env` is the only file users edit
+- **Consistency**: Prevents version mismatches between manifest and config
+- **Discoverability**: `scan --repos` auto-discovers images and charts
+- **Flexibility**: Manual additions preserved during regeneration
+- **Simplicity**: Users don't need to understand manifest schema
 
-The original build system was bash scripts. We're migrating to Python for:
-- Better error handling (exceptions vs exit codes)
-- Testability (unit tests, property-based tests)
-- Maintainability (type hints, structured logging)
-- Extensibility (plugins, hooks)
+**Trade-offs**:
+- **Magic**: Auto-generation can be surprising
+- **Debugging**: Harder to troubleshoot manifest issues
+- **Customization**: Advanced users may want full control
 
-Bash is still used for simple glue scripts (start-nginx.sh, setup-all.sh) because it's transparent and easy to audit.
+**Evidence**: `src/opencenter_build/cli.py:build()`, `src/opencenter_build/component_manifest.py:create_default_manifest()`
+
+### 4. Checkpoint/Resume Build System
+
+**Decision**: Implement stateful build with checkpoint/resume capability.
+
+**Rationale**:
+- **Network failures**: Internet downloads can fail mid-build
+- **Time savings**: Resume from last successful step (not restart)
+- **Debugging**: Inspect state after failure
+- **Reproducibility**: State file documents what was built
+
+**Trade-offs**:
+- **Complexity**: State management adds code complexity
+- **State corruption**: File corruption can break resume
+- **Disk usage**: State files consume disk space
+
+**Evidence**: `src/opencenter_build/state.py:StateManager`, `src/opencenter_build/orchestrator.py:BuildOrchestrator`
+
+### 5. Bastion Architecture
+
+**Decision**: Use dedicated bastion host instead of distributing packages to each node.
+
+**Rationale**:
+- **Centralized control**: Single point for package management
+- **Bandwidth efficiency**: Nodes pull from local network (not USB)
+- **Security**: Bastion is the only host with package access
+- **Scalability**: Add nodes without re-distributing packages
+- **Observability**: Monitor all package pulls from one location
+
+**Trade-offs**:
+- **Single point of failure**: Bastion down = cluster can't pull images
+- **Network dependency**: Requires reliable bastion-to-node connectivity
+- **Resource overhead**: Bastion needs 100+ GB disk, 8+ GB RAM
+
+**Evidence**: `zarf.yaml:deploy-cluster`, `README.md:Three-Zone Model`
 
 ## Data Flow
 
-### Build Phase
+### Build Flow
 
-1. **Input**: Component manifest (components.yaml) + version pins (versions.env)
-2. **Asset Collection**: kubespray-offline downloads from internet
-3. **Staging**: Assets copied to `assets/` directory
-4. **Packaging**: Zarf reads zarf.yaml, compresses assets, generates SBOM
-5. **Signing**: Cosign signs the package with a private key
-6. **Output**: Artifact + SBOM + signature
+```
+versions.env
+    │
+    ▼ parse_versions_env()
+BuildConfig
+    │
+    ▼ create_default_manifest()
+components.yaml (auto-generated)
+    │
+    ▼ scan_repositories()
+components.yaml (with discoveries)
+    │
+    ▼ BuildOrchestrator.execute()
+Build Steps:
+  1. scan_repositories()      → config/all-images.txt
+  2. collect_helm_charts()    → config/helm-charts.txt
+  3. generate_kubespray_lists() → config/kubespray-files.txt
+  4. mirror_terraform_providers() → assets/terraform-mirror/
+  5. organize_assets()        → assets/
+  6. create_zarf_package()    → dist/zarf-package-*.tar.zst
+  7. generate_manifest()      → dist/artifact-manifest.json
+    │
+    ▼
+Zarf Package + SBOM + Checksum
+```
 
-### Deploy Phase
+**Evidence**: `src/opencenter_build/orchestrator.py:BuildOrchestrator`, `src/opencenter_build/cli.py:build()`
 
-1. **Input**: Artifact on bastion
-2. **Extraction**: Zarf unpacks to `/opt/opencenter/`
-3. **Service Start**: Registry and nginx start, serving local content
-4. **Node Configuration**: Ansible configures nodes to use bastion repos
-5. **Cluster Install**: Kubespray installs Kubernetes, pulling from bastion
-6. **GitOps Bootstrap**: FluxCD deploys core services from Gitea
+### Deployment Flow
 
-## Security Model
+```
+Zarf Package
+    │
+    ▼ zarf package deploy
+Bastion Services:
+  - Extract to /opt/opencenter/
+  - Start registry (port 5000)
+  - Start nginx (port 8080)
+  - Load images into registry
+    │
+    ▼ ansible-playbook offline-repo.yml
+Cluster Nodes:
+  - Configure apt sources → bastion:8080/debs
+  - Configure pip index → bastion:8080/pypi
+    │
+    ▼ ansible-playbook cluster.yml
+Kubernetes Cluster:
+  - Install containerd (from bastion)
+  - Install kubelet (from bastion)
+  - Pull images (from bastion:5000)
+  - Bootstrap control plane
+  - Join worker nodes
+    │
+    ▼ FluxCD reconciliation
+Applications:
+  - Deploy platform services
+  - Deploy customer workloads
+```
 
-**Threat Model**: Attacker controls the network between build host and internet. Attacker cannot modify the artifact after it's signed.
+**Evidence**: `zarf.yaml:components`, `README.md:Complete Cluster Lifecycle`
 
-**Mitigations**:
-- All downloads verified with checksums (kubespray-offline)
-- Container images pulled by digest, not tag
-- Artifact signed with Cosign (private key offline)
-- SBOM includes every component (auditable before deployment)
-- Trivy scans for CVEs (fail build on HIGH/CRITICAL)
+## Security Architecture
 
-**Trust Boundary**: The artifact. Everything inside is trusted (verified at build time). Everything outside is untrusted (network, external repos).
+### Threat Model
 
-**Secrets**: Never in git. Injected at build time from `.secrets/` directory. See [Secrets Management](../../reference/secrets-management.md).
+**Threats mitigated**:
+- **Supply chain attacks**: SBOM + signature verification
+- **Package tampering**: Cryptographic signing with Cosign
+- **Credential exposure**: File-based secrets (never in git)
+- **Unauthorized access**: SSH key-based authentication
+- **Network eavesdropping**: TLS for all external connections
 
-## Scalability
+**Threats NOT mitigated**:
+- **Insider threats**: Assumes trusted build environment
+- **Physical security**: Assumes secure Zone B transfer
+- **Runtime vulnerabilities**: Requires separate runtime security (Kyverno, PSS)
 
-**Build**: Single-threaded. Takes 30-45 minutes. Parallelizing downloads would help, but adds complexity. Current bottleneck is network (downloading 25GB).
+**Evidence**: `SECURITY.md`, `src/opencenter_build/secrets.py`, `src/opencenter_build/verifier.py`
 
-**Deploy**: Bastion serves 100+ nodes without issue. Registry and nginx are lightweight. Bottleneck is Ansible (serial SSH connections). Kubespray supports batching (10 nodes at a time).
+### Defense in Depth
 
-**Storage**: Bastion needs 100GB. Each additional component adds ~1-5GB. If you hit limits, split into multiple packages (base + addons).
+**Layer 1: Build-time**
+- Dependency pinning (`config/versions.env`)
+- Schema validation (`src/opencenter_build/validation.py`)
+- Secrets isolation (`.secrets/` directory)
 
-## Failure Modes
+**Layer 2: Package-time**
+- SBOM generation (Zarf)
+- Cryptographic signing (Cosign)
+- Checksum generation (SHA256)
 
-**Build fails mid-download**: Resume from last checkpoint. State manager tracks completed steps.
+**Layer 3: Transfer-time**
+- Signature verification
+- SBOM validation
+- CVE scanning (Trivy)
 
-**Deploy fails mid-install**: Kubespray is idempotent. Re-run the playbook.
+**Layer 4: Deploy-time**
+- Package integrity check
+- SSH key authentication
+- Bastion network isolation
 
-**Bastion loses power**: Registry and nginx restart automatically (systemd units). Cluster keeps running (nodes cache images).
+**Layer 5: Runtime**
+- Pod Security Admission (Kubespray)
+- Kyverno policies (openCenter-gitops-base)
+- NetworkPolicies (openCenter-gitops-base)
 
-**Node loses connectivity to bastion**: Cluster keeps running. New pods can't start (ImagePullBackOff). Fix network, pods recover automatically.
+**Evidence**: `SECURITY.md`, `src/opencenter_build/verifier.py`, ecosystem.md (in parent workspace)
 
-## Trade-offs
+## Scalability Considerations
 
-**Artifact Size**: 25GB compressed. Large, but unavoidable. We need every dependency. Splitting into multiple artifacts adds operational complexity.
+### Build Scalability
 
-**Build Time**: 30-45 minutes. Slow, but acceptable. Build once, deploy many times. If this becomes a bottleneck, parallelize downloads.
+**Horizontal scaling**: Not supported (single build host)
 
-**Bastion as SPOF**: If bastion fails, new pods can't start. Mitigation: HA bastion (two nodes, load balanced). Not implemented yet because it adds complexity.
+**Vertical scaling**:
+- CPU: Parallel downloads (`--parallel N`)
+- RAM: Caching (more RAM = faster builds)
+- Disk: SSD vs HDD (3-5x faster)
+- Network: Bandwidth (major bottleneck)
 
-**Version Coupling**: All components pinned to tested versions. Updating one component requires rebuilding the entire artifact. This is intentional: we want tested combinations, not arbitrary mixes.
+**Typical limits**:
+- Components: 500+ (tested)
+- Images: 1000+ (tested)
+- Package size: 50 GB (practical limit)
 
-## Future Directions
+**Evidence**: `src/opencenter_build/cli.py:build()`, `src/opencenter_build/scanner.py:RepositoryScanner`
 
-**Incremental Updates**: Delta packages (only changed components). Reduces transfer size for updates.
+### Deployment Scalability
 
-**HA Bastion**: Two bastion nodes, load balanced. Eliminates SPOF.
+**Cluster size**:
+- Control plane: 5 nodes (etcd limit)
+- Workers: 100 nodes (Kubernetes default)
+- Pods: 11,000 (Kubernetes default)
 
-**Multi-Arch**: ARM64 support. Requires separate builds (different binaries, different images).
+**Bastion limits**:
+- Concurrent pulls: 100+ (registry limit)
+- Bandwidth: 10 Gbps (network limit)
+- Storage: 200 GB (practical limit)
 
-**Modular Packages**: Base + addons. Deploy base first, add components later. Reduces initial artifact size.
+**Evidence**: Kubernetes scalability documentation, observed deployments
 
-See [Roadmap](../../roadmap.md) for details.
+## Performance Characteristics
+
+### Build Performance
+
+**Bottlenecks**:
+1. **Network bandwidth** (major) - Downloading 15+ GB of images
+2. **Disk I/O** (moderate) - Writing 50+ GB of artifacts
+3. **CPU** (minor) - Parallel downloads and compression
+
+**Optimization strategies**:
+- Use SSD for build directory
+- Increase parallel workers (`--parallel 8`)
+- Use fast internet connection (100+ Mbps)
+- Cache builds (resume from checkpoint)
+
+**Evidence**: Observed from build logs, `src/opencenter_build/orchestrator.py`
+
+### Deployment Performance
+
+**Bottlenecks**:
+1. **Bastion-to-node bandwidth** (major) - Pulling images
+2. **Disk I/O on nodes** (moderate) - Extracting images
+3. **Ansible serial execution** (minor) - Node provisioning
+
+**Optimization strategies**:
+- Use 10 Gbps network between bastion and nodes
+- Use SSD on cluster nodes
+- Increase Ansible parallelism (Kubespray config)
+
+**Evidence**: Observed from deployment logs, Kubespray documentation
+
+## Extensibility Points
+
+### Adding New Components
+
+**Extension point**: `opencenter-build add` command
+
+**Process**:
+1. Add component to `components.yaml` (manual or via CLI)
+2. Rebuild package
+3. Deploy updated package
+
+**Evidence**: `src/opencenter_build/cli.py:add()`, `src/opencenter_build/component_manifest.py`
+
+### Adding New Build Steps
+
+**Extension point**: `BuildOrchestrator.register_step_handler()`
+
+**Process**:
+1. Implement step handler function
+2. Register with orchestrator
+3. Add to build sequence
+
+**Evidence**: `src/opencenter_build/orchestrator.py:BuildOrchestrator`, `src/opencenter_build/cli.py:build()`
+
+### Adding New Zarf Components
+
+**Extension point**: `zarf.yaml:components`
+
+**Process**:
+1. Define component in `zarf.yaml`
+2. Add files/images to component
+3. Define deployment actions
+
+**Evidence**: `zarf.yaml`, Zarf documentation
+
+## Operational Characteristics
+
+### Observability
+
+**Logging**:
+- Structured logs (`src/opencenter_build/logging.py`)
+- Multiple levels (DEBUG, INFO, WARNING, ERROR)
+- File and console output
+
+**Metrics**:
+- Build duration
+- Component counts
+- Artifact sizes
+- Step timings
+
+**State**:
+- Build state file (`build/state.json`)
+- Checkpoint/resume capability
+- Progress tracking
+
+**Evidence**: `src/opencenter_build/logging.py`, `src/opencenter_build/metrics.py`, `src/opencenter_build/state.py`
+
+### Maintainability
+
+**Code organization**:
+- Clear module boundaries
+- Single responsibility principle
+- Dependency injection
+
+**Testing**:
+- Unit tests (96.8% coverage)
+- Property-based tests (hypothesis)
+- Integration tests
+
+**Documentation**:
+- Diátaxis framework
+- Code comments
+- Type hints
+
+**Evidence**: `src/opencenter_build/`, `tests/`, `docs/`, `pyproject.toml:[tool.coverage]`
+
+## Trade-offs and Limitations
+
+### Current Limitations
+
+1. **kubespray-offline integration**: In progress, not fully automated
+2. **Zarf package creation**: Requires Zarf CLI (not pure Python)
+3. **Terraform provider mirroring**: OpenStack only
+4. **Multi-architecture**: amd64 only (arm64 planned)
+5. **Windows nodes**: Separate process (opencenter-windows)
+
+**Evidence**: `README.md:Project Status`, `zarf.yaml:metadata:architecture`
+
+### Architectural Trade-offs
+
+**Simplicity vs Flexibility**:
+- Chose simplicity: Auto-generated manifest, opinionated structure
+- Trade-off: Less flexibility for advanced users
+
+**Performance vs Reliability**:
+- Chose reliability: Checkpoint/resume, state management
+- Trade-off: More complex code, slower builds
+
+**Portability vs Integration**:
+- Chose integration: Zarf, Kubespray, FluxCD
+- Trade-off: More dependencies, less portable
+
+**Evidence**: Design decision sections above
+
+## Future Architecture Evolution
+
+### Planned Improvements
+
+1. **Binary distribution**: PyInstaller for single-file executable
+2. **Multi-architecture**: arm64 support
+3. **Enhanced SBOM**: Vulnerability scanning integration
+4. **Build determinism**: Reproducible builds with fixed timestamps
+5. **Distributed builds**: Multi-host parallel builds
+
+**Evidence**: `README.md:Planned`
+
+### Architectural Principles
+
+**Guiding principles** for future changes:
+
+1. **Simplicity first**: Prefer simple solutions over clever ones
+2. **Evidence-based**: All claims backed by code or tests
+3. **Fail-safe**: Errors should be obvious and recoverable
+4. **Composability**: Components should work independently
+5. **Observability**: All operations should be traceable
+
+**Evidence**: `CONTRIBUTING.md`, `.kiro/steering/Engineering.md`
+
+## See Also
+
+- [Three-Zone Security Model](three-zone-security.md) - Detailed security architecture
+- [Bastion Architecture](bastion-architecture.md) - Bastion service design
+- [Why Zarf](../design-decisions/why-zarf.md) - Packaging framework rationale
+- [Python vs Bash](../design-decisions/python-vs-bash.md) - Language selection
+- [State Management Approach](../design-decisions/state-management.md) - Build state design
+- [System Requirements](../../reference/system-requirements.md) - Hardware and software requirements
+- [Build Steps Reference](../../reference/build-steps.md) - Detailed build phase breakdown

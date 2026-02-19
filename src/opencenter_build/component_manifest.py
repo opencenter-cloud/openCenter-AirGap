@@ -617,7 +617,7 @@ def write_manifest(manifest: ComponentManifest, path: Path) -> None:
         header = """# Component Manifest
 # Auto-generated from config/versions.env
 # Manual edits are preserved during regeneration
-# To regenerate: python3 -m opencenter_build.cli build --force-regenerate
+# To regenerate: opencenter-airgap build --force-regenerate
 
 """
 

@@ -23,13 +23,13 @@ Install openCenter AirGap on a connected build host (Zone A) with Python 3.10+, 
 ```bash
 # Clone repository
 git clone <repo-url>
-cd opencenter-airgap
+cd openCenter-AirGap
 
 # Install package in development mode
 pip install -e .
 
 # Verify installation
-python3 -m opencenter_build.cli --help
+opencenter-airgap --help
 ```
 
 ### Development Installation
@@ -61,16 +61,16 @@ Create a new air-gap package by initializing the project, editing versions, and 
 
 ```bash
 # 1. Initialize project (creates default versions.env)
-python3 -m opencenter_build.cli init
+opencenter-airgap init
 
 # 2. Edit versions (single source of truth)
 vim config/versions.env
 
 # 3. Build (auto-generates components.yaml from versions.env)
-python3 -m opencenter_build.cli build
+opencenter-airgap build
 
 # 4. Optional: Auto-discover images/charts from repos
-python3 -m opencenter_build.cli scan --repos
+opencenter-airgap scan --repos
 ```
 
 ### Deploy Package in Air-Gap
@@ -119,17 +119,17 @@ The build command automatically generates components.yaml from versions.env. If 
 
 ```bash
 # Initial build generates components.yaml
-python3 -m opencenter_build.cli build
+opencenter-airgap build
 
 # Add custom components after initial build
-python3 -m opencenter_build.cli add image custom-registry.io/app:v1.0
-python3 -m opencenter_build.cli add tool --name mytool --version v1.0 --url <url>
+opencenter-airgap add image custom-registry.io/app:v1.0
+opencenter-airgap add tool --name mytool --version v1.0 --url <url>
 
 # Rebuild preserves custom additions
-python3 -m opencenter_build.cli build
+opencenter-airgap build
 
 # Force clean regeneration (loses manual edits)
-python3 -m opencenter_build.cli build --force-regenerate
+opencenter-airgap build --force-regenerate
 ```
 
 ### Bastion Architecture

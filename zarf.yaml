@@ -68,19 +68,15 @@ components:
   - source: assets/terraform-mirror/
     target: '###ZARF_VAR_INSTALL_PATH###/terraform-mirror/'
     executable: false
-  - source: assets/terraform/.terraformrc
-    target: /root/.terraformrc
-    executable: false
-  - source: assets/terraform/.terraform.lock.hcl
-    target: '###ZARF_VAR_INSTALL_PATH###/terraform/.terraform.lock.hcl'
-    executable: false
   actions:
     onDeploy:
       after:
       - cmd: 'mkdir -p ###ZARF_VAR_INSTALL_PATH###/terraform-cache'
         description: Create Terraform cache directory
-      - cmd: 'echo "Terraform providers mirrored:" && ls -lh ###ZARF_VAR_INSTALL_PATH###/terraform-mirror/registry.terraform.io/ 2>/dev/null | head -10 || echo "No providers found"'
-        description: Verify Terraform provider mirror
+      - cmd: "cat > /root/.terraformrc << 'EOF'\n\nplugin_cache_dir   = \"###ZARF_VAR_INSTALL_PATH###/terraform-cache\"\n\
+          disable_checkpoint = true\n\nprovider_installation {\n  filesystem_mirror {\n    path    = \"###ZARF_VAR_INSTALL_PATH###/terraform-mirror\"\
+          \n    include = [\"*/*\"]\n  }\n  direct {\n    exclude = [\"*/*\"]\n  }\n}\n\nEOF"
+        description: Configure Terraform filesystem mirror
 # Component 3: kubespray-core
 # Dependencies: bootstrap-tools (logical, for Python venv used later by Kubespray)
 # Independence: Can deploy independently (only copies files, no runtime dependency)
@@ -103,47 +99,23 @@ components:
     executable: false
 # Component 4: k8s-images
 # Dependencies: None
-# Independence: Fully independent, can deploy alone
-# Provides: Container images via Zarf's native image handling
-# Images are dynamically populated from config/all-images.txt during build
+# Independence: Fully independent, can deploy alone (skips if no images)
+# Provides: Local registry, K8s and openCenter service images
 - name: k8s-images
-  description: Container images for Kubernetes and core services
-  required: true
-###IMAGES_BLOCK###
-# Component 5: operator-tools
-# Dependencies: None
-# Independence: Fully independent, optional component
-# Provides: CLI tools for cluster operators (k9s, helm, stern, kubectx)
-- name: operator-tools
-  description: Optional CLI tools for cluster operators
+  description: Container images for Kubernetes and core services (optional until collected)
   required: false
-  files:
-  - source: assets/operator-tools/k9s
-    target: /usr/local/bin/k9s
-    executable: true
-  - source: assets/operator-tools/helm
-    target: /usr/local/bin/helm
-    executable: true
-  - source: assets/operator-tools/stern
-    target: /usr/local/bin/stern
-    executable: true
-  - source: assets/operator-tools/kubectx
-    target: /usr/local/bin/kubectx
-    executable: true
-  - source: assets/operator-tools/kubens
-    target: /usr/local/bin/kubens
-    executable: true
   actions:
     onDeploy:
-      after:
+      before:
       - cmd: |
-          echo "Operator tools installed:"
-          k9s version || echo "k9s: $(k9s version 2>&1 | head -1)"
-          helm version --short || echo "helm: $(helm version --short 2>&1)"
-          stern --version || echo "stern: $(stern --version 2>&1)"
-          echo "kubectx/kubens: installed"
-        description: Verify operator tools installation
-# Component 6: deploy-cluster
+          if [ -d "###ZARF_VAR_INSTALL_PATH###/images" ] && [ "$(ls -A ###ZARF_VAR_INSTALL_PATH###/images 2>/dev/null)" ]; then
+            podman ps -q -f name=local-registry | grep . || podman run -d -p ###ZARF_VAR_REGISTRY_PORT###:5000 -v /var/lib/registry:/var/lib/registry --restart=always --name local-registry registry:2.8.3
+            ###ZARF_VAR_INSTALL_PATH###/target-scripts/load-push-all-images.sh
+          else
+            echo "No images directory found, skipping image loading"
+          fi
+        description: Load images if available
+# Component 5: deploy-cluster
 # Dependencies: bootstrap-tools (needs target-scripts), kubespray-core (needs playbooks)
 # Independence: Cannot deploy independently, requires prerequisites
 # Provides: Bastion setup orchestration (nginx, registry, Python venv)

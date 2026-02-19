@@ -15,16 +15,16 @@ Simplify the build workflow to use `versions.env` as the single source of truth,
 
 ```bash
 # 1. Initialize project (creates default versions.env)
-python3 -m opencenter_build.cli init
+opencenter-airgap init
 
 # 2. Edit versions (single source of truth)
 vim config/versions.env
 
 # 3. Build (auto-generates components.yaml from versions.env)
-python3 -m opencenter_build.cli build
+opencenter-airgap build
 
 # 4. Optional: Auto-discover images/charts from repos
-python3 -m opencenter_build.cli scan --repos
+opencenter-airgap scan --repos
 ```
 
 ## Requirements

@@ -28,6 +28,39 @@ app = typer.Typer(
 )
 
 
+def _is_valid_image_ref(image: str) -> bool:
+    """Validate image reference format.
+
+    Args:
+        image: Image reference string
+
+    Returns:
+        True if valid image reference
+    """
+    if not image or not isinstance(image, str):
+        return False
+
+    # Skip empty or just slash
+    if image in ("", "/", "/:"):
+        return False
+
+    # Skip template variables
+    if "{{" in image or "}}" in image:
+        return False
+
+    # Must have at least one alphanumeric character
+    if not any(c.isalnum() for c in image):
+        return False
+
+    # Basic format check: should have registry/repo:tag or repo:tag
+    # At minimum, should have a name component
+    parts = image.split("/")
+    if all(not p or p == ":" for p in parts):
+        return False
+
+    return True
+
+
 @app.command()
 def init(
     template: str = typer.Option("baremetal", "--template", help="Template: baremetal, openstack"),
@@ -1127,7 +1160,9 @@ def build(
                 for line in all_images_file.read_text().splitlines():
                     line = line.strip()
                     if line and not line.startswith("#"):
-                        images.append(line)
+                        # Validate image reference
+                        if _is_valid_image_ref(line):
+                            images.append(line)
 
                 # Generate images block
                 images_yaml = "  images:\n"

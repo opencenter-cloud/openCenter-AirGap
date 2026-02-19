@@ -346,9 +346,7 @@ class TestManifestMetadata:
         assert "# Component Manifest" in content
         assert "# Auto-generated from config/versions.env" in content
         assert "# Manual edits are preserved during regeneration" in content
-        assert (
-            "# To regenerate: python3 -m opencenter_build.cli build --force-regenerate" in content
-        )
+        assert "# To regenerate: opencenter-airgap build --force-regenerate" in content
 
         # Check metadata section
         assert "_generated:" in content

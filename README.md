@@ -44,29 +44,29 @@ The output is a single `.tar.zst` file with an SBOM and cryptographic signature.
 ```bash
 # Clone repository
 git clone <repo-url>
-cd opencenter-airgap
+cd openCenter-AirGap
 
 # Install package in development mode
 pip install -e .
 
 # Verify installation
-python3 -m opencenter_build.cli --help
+opencenter-airgap --help
 ```
 
 ### Build Package (Zone A - Connected)
 
 ```bash
 # 1. Initialize project (creates default versions.env)
-python3 -m opencenter_build.cli init
+opencenter-airgap init
 
 # 2. Edit versions (single source of truth)
 vim config/versions.env
 
 # 3. Build (auto-generates components.yaml from versions.env)
-python3 -m opencenter_build.cli build
+opencenter-airgap build
 
 # 4. Optional: Auto-discover images/charts from repos
-python3 -m opencenter_build.cli scan --repos
+opencenter-airgap scan --repos
 ```
 
 The `build` command automatically generates `components.yaml` from `versions.env`. If `versions.env` is updated, the next build regenerates the manifest while preserving any manual additions.
@@ -74,14 +74,14 @@ The `build` command automatically generates `components.yaml` from `versions.env
 **Optional Customization:**
 ```bash
 # Add custom components after initial build
-python3 -m opencenter_build.cli add image custom-registry.io/app:v1.0
-python3 -m opencenter_build.cli add tool --name mytool --version v1.0 --url <url>
+opencenter-airgap add image custom-registry.io/app:v1.0
+opencenter-airgap add tool --name mytool --version v1.0 --url <url>
 
 # Rebuild preserves custom additions
-python3 -m opencenter_build.cli build
+opencenter-airgap build
 
 # Force clean regeneration (loses manual edits)
-python3 -m opencenter_build.cli build --force-regenerate
+opencenter-airgap build --force-regenerate
 ```
 
 **Current Limitations:**
@@ -115,49 +115,54 @@ See [First Deployment Tutorial](docs/tutorials/01-first-deployment.md) for compl
 
 ## Documentation
 
-Documentation follows the [Diátaxis framework](https://diataxis.fr/):
+Complete documentation following the [Diátaxis framework](https://diataxis.fr/):
 
 | I want to... | Start here |
 |--------------|------------|
 | Learn by doing | [First Deployment Tutorial](docs/tutorials/01-first-deployment.md) |
-| Complete a specific task | [How-to Guides](docs/taxonomy.md#how-to-guides) |
-| Look up technical details | [Reference Docs](docs/taxonomy.md#reference) |
-| Understand the design | [Architecture Review](docs/architecture-review.md) |
+| Complete a specific task | [How-to Guides](docs/README.md#how-to-guides-task-oriented) |
+| Look up technical details | [Reference Documentation](docs/README.md#reference-information-oriented) |
+| Understand the design | [Architecture Overview](docs/explanation/architecture/architecture-overview.md) |
 
-Full navigation: [Documentation Taxonomy](docs/taxonomy.md)
+**Quick Links**:
+- [Documentation Home](docs/README.md) - Complete documentation index
+- [Quick Navigation](docs/_nav.md) - Navigate by role or workflow
+- [System Requirements](docs/reference/system-requirements.md) - Hardware and software requirements
+- [CLI Commands Reference](docs/reference/cli-commands.md) - Complete command documentation
+- [Troubleshooting](docs/reference/troubleshooting.md) - Common errors and solutions
 
 ## CLI Commands
 
 ```bash
 # Initialize new build environment (creates default versions.env)
-python3 -m opencenter_build.cli init [--template baremetal|openstack]
+opencenter-airgap init [--template baremetal|openstack]
 
 # Add components to manifest (for customization)
-python3 -m opencenter_build.cli add tool --name kubectl --version v1.34.3 --url <url>
-python3 -m opencenter_build.cli add image registry.k8s.io/kube-apiserver:v1.34.3
-python3 -m opencenter_build.cli add repo https://github.com/kubernetes-sigs/kubespray.git
+opencenter-airgap add tool --name kubectl --version v1.34.3 --url <url>
+opencenter-airgap add image registry.k8s.io/kube-apiserver:v1.34.3
+opencenter-airgap add repo https://github.com/kubernetes-sigs/kubespray.git
 
 # Scan repositories for images and charts
-python3 -m opencenter_build.cli scan --repos              # Clone repos from versions.env and scan
-python3 -m opencenter_build.cli scan --repo build/kubespray  # Scan specific directory
+opencenter-airgap scan --repos              # Clone repos from versions.env and scan
+opencenter-airgap scan --repo build/kubespray  # Scan specific directory
 
 # Build package (auto-generates components.yaml from versions.env)
-python3 -m opencenter_build.cli build [--clean] [--resume] [--force-regenerate]
+opencenter-airgap build [--clean] [--resume] [--force-regenerate]
 
 # Check build status
-python3 -m opencenter_build.cli status
+opencenter-airgap status
 
 # Verify package integrity
-python3 -m opencenter_build.cli verify <package> [--manifest <manifest>]
+opencenter-airgap verify <package> [--manifest <manifest>]
 
 # Validate configuration
-python3 -m opencenter_build.cli validate
+opencenter-airgap validate
 
 # Display version
-python3 -m opencenter_build.cli version
+opencenter-airgap version
 
 # Clean build artifacts
-python3 -m opencenter_build.cli clean
+opencenter-airgap clean
 ```
 
 See [CLI Reference](docs/reference/cli-commands.md) for complete command documentation.
@@ -179,11 +184,11 @@ See [CLI Reference](docs/reference/cli-commands.md) for complete command documen
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Zone A: Factory (Connected)                                 │
-│                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
-│  │ kubespray-   │───▶│ opencenter-  │───▶│ Zarf Package │ │
-│  │ offline      │    │ build        │    │ (.tar.zst)   │ │
-│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
+│  │ kubespray-   │───▶│ opencenter-  │───▶│ Zarf Package │   │
+│  │ offline      │    │ build        │    │ (.tar.zst)   │   │
+│  └──────────────┘    └──────────────┘    └──────────────┘   │
 │        │                     │                              │
 │        ▼                     ▼                              │
 │  Download from          Collect into                        │
@@ -193,12 +198,12 @@ See [CLI Reference](docs/reference/cli-commands.md) for complete command documen
                               ▼ Physical Transfer
 ┌─────────────────────────────────────────────────────────────┐
 │ Zone C: Field (Disconnected)                                │
-│                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐ │
-│  │ Bastion      │───▶│ Target Nodes │───▶│ K8s Cluster  │ │
-│  │ (registry +  │    │ (kubelet +   │    │ (workloads)  │ │
-│  │  repos)      │    │  containerd) │    │              │ │
-│  └──────────────┘    └──────────────┘    └──────────────┘ │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
+│  │ Bastion      │───▶│ Target Nodes │───▶│ K8s Cluster  │   │
+│  │ (registry +  │    │ (kubelet +   │    │ (workloads)  │   │
+│  │  repos)      │    │  containerd) │    │              │   │
+│  └──────────────┘    └──────────────┘    └──────────────┘   │
 │        │                     │                              │
 │        ▼                     ▼                              │
 │  Serves images          Pulls from                          │
@@ -206,7 +211,7 @@ See [CLI Reference](docs/reference/cli-commands.md) for complete command documen
 └─────────────────────────────────────────────────────────────┘
 ```
 
-See [Architecture Overview](docs/explanation/architecture/architecture-overview.md) for details.
+See [Architecture Overview](docs/explanation/architecture/architecture-overview.md) for complete system design and rationale.
 
 ## Technology Stack
 
@@ -219,7 +224,7 @@ See [Architecture Overview](docs/explanation/architecture/architecture-overview.
 - **Monitoring**: Prometheus v2.48.0, Grafana 10.2.0
 - **Certificates**: cert-manager v1.13.0
 
-All versions pinned in `config/versions.env`. See [Version Management](docs/reference/version-management.md).
+All versions pinned in `config/versions.env`. See [Version Management](docs/reference/version-management.md) (planned).
 
 ## Project Status
 
@@ -280,7 +285,7 @@ See [System Requirements](docs/reference/system-requirements.md) for detailed sp
 - Secrets managed via file-based injection (never in git)
 - Trivy scanning for CVEs (policy: fail on HIGH/CRITICAL)
 
-See [SECURITY.md](SECURITY.md) for vulnerability reporting and [Secrets Management](docs/reference/secrets-management.md) for handling credentials.
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and [Secrets Management](docs/reference/secrets-management.md) (planned) for handling credentials.
 
 ## License
 
