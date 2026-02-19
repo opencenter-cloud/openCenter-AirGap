@@ -274,7 +274,7 @@ CERT_MANAGER_VERSION=v1.16.2
         # Check repositories
         repo_names = [r.name for r in manifest.repositories]
         assert "kubespray" in repo_names
-        assert "opencenter-gitops-base" in repo_names
+        assert "openCenter-gitops-base" in repo_names
 
         # Check charts
         chart_names = [c.name for c in manifest.charts]
@@ -518,7 +518,7 @@ class TestExtractReposFromVersions:
         repos = extract_repos_from_versions(versions)
 
         assert len(repos) == 1
-        assert repos[0].name == "opencenter-gitops-base"
+        assert repos[0].name == "openCenter-gitops-base"
         assert repos[0].url == "https://github.com/rackerlabs/openCenter-gitops-base"
         assert repos[0].ref == "v1.0.0"
 
@@ -536,7 +536,7 @@ class TestExtractReposFromVersions:
 
         repo_names = [r.name for r in repos]
         assert "kubespray" in repo_names
-        assert "opencenter-gitops-base" in repo_names
+        assert "openCenter-gitops-base" in repo_names
 
     def test_handles_missing_kubespray_version(self):
         """Test handling missing KUBESPRAY_VERSION."""
@@ -548,7 +548,7 @@ class TestExtractReposFromVersions:
         repos = extract_repos_from_versions(versions)
 
         assert len(repos) == 1
-        assert repos[0].name == "opencenter-gitops-base"
+        assert repos[0].name == "openCenter-gitops-base"
 
     def test_handles_missing_opencenter_repo(self):
         """Test handling missing OPENCENTER_GITOPS_BASE_REPO."""
