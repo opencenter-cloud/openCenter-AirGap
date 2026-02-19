@@ -421,13 +421,13 @@ def scan(
             manifest = read_manifest(manifest_path)
 
             # Check if repositories are cloned
-            for repo_spec in manifest.repositories:
-                repo_path = Path("build") / repo_spec.name
+            for repo in manifest.repositories:
+                repo_path = Path("build") / repo.name
                 if repo_path.exists():
                     repos_to_scan.append(repo_path)
                 else:
                     console.print(f"[yellow]⚠[/yellow] Repository not found: {repo_path}")
-                    console.print(f"  Clone {repo_spec.url} to {repo_path}")
+                    console.print(f"  Clone {repo.url} to {repo_path}")
 
         if repos:
             repos_to_scan.extend(repos)
@@ -439,11 +439,11 @@ def scan(
 
         # Validate repositories exist
         valid_repos = []
-        for repo in repos_to_scan:
-            if repo.exists() and repo.is_dir():
-                valid_repos.append(repo)
+        for repo_path in repos_to_scan:
+            if repo_path.exists() and repo_path.is_dir():
+                valid_repos.append(repo_path)
             else:
-                console.print(f"[yellow]⚠[/yellow] Repository not found: {repo}")
+                console.print(f"[yellow]⚠[/yellow] Repository not found: {repo_path}")
 
         if not valid_repos:
             console.print("[bold red]Error:[/bold red] No valid repositories found")
@@ -451,8 +451,8 @@ def scan(
 
         console.print(f"[cyan]Scanning {len(valid_repos)} repositories...[/cyan]")
         if verbose:
-            for repo in valid_repos:
-                console.print(f"  - {repo}")
+            for repo_path in valid_repos:
+                console.print(f"  - {repo_path}")
 
         # Create scanner
         scanner = RepositoryScanner(
@@ -474,11 +474,11 @@ def scan(
 
             results = scanner.scan_all()
 
-            for repo_path, images in results.items():
+            for repo_path_str, images in results.items():
                 all_images.update(images)
                 progress.update(task, advance=1)
                 if verbose:
-                    console.print(f"  {repo_path}: {len(images)} images")
+                    console.print(f"  {repo_path_str}: {len(images)} images")
 
         # Scan for Helm charts
         console.print("[cyan]Scanning for Helm charts...[/cyan]")
@@ -1840,7 +1840,7 @@ def serve(
             task = progress.add_task("Executing zarf package deploy...", total=None)
 
             try:
-                result = subprocess.run(
+                deploy_result: subprocess.CompletedProcess[str] = subprocess.run(
                     ["zarf", "package", "deploy", str(package), "--confirm"],
                     capture_output=True,
                     text=True,
@@ -1848,7 +1848,7 @@ def serve(
                 )
 
                 if verbose:
-                    console.print(result.stdout)
+                    console.print(deploy_result.stdout)
 
                 progress.update(task, completed=True)
                 console.print("[green]✓ Zarf package deployed[/green]\n")
@@ -1873,7 +1873,7 @@ def serve(
 
         # Check if container already exists
         try:
-            result = subprocess.run(
+            check_result: subprocess.CompletedProcess[str] = subprocess.run(
                 [
                     "docker",
                     "ps",
@@ -1888,7 +1888,7 @@ def serve(
                 check=True,
             )
 
-            if nginx_container_name in result.stdout:
+            if nginx_container_name in check_result.stdout:
                 # Stop and remove existing container
                 subprocess.run(
                     ["docker", "stop", nginx_container_name],
@@ -1922,7 +1922,7 @@ def serve(
                 "nginx:1.29.2",
             ]
 
-            result = subprocess.run(
+            run_result: subprocess.CompletedProcess[str] = subprocess.run(
                 nginx_cmd,
                 capture_output=True,
                 text=True,

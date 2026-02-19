@@ -78,6 +78,7 @@ def setup_logging(
     handlers: list[logging.Handler] = []
 
     # Choose formatter based on json_format flag
+    formatter: logging.Formatter | JSONFormatter
     if json_format:
         formatter = JSONFormatter()
     else:

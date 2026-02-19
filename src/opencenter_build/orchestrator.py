@@ -322,7 +322,7 @@ class BuildOrchestrator:
         logger = logging.getLogger(__name__)
 
         # Define rollback actions per step
-        rollback_actions = {
+        rollback_actions: dict[str, Any] = {
             "scan_repositories": lambda: self._cleanup_file(Path("config/all-images.txt")),
             "collect_kubespray_offline": lambda: self._cleanup_directory(
                 Path("build/kubespray-offline/outputs")

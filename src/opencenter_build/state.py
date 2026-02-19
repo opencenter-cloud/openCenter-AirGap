@@ -311,8 +311,12 @@ class StateManager:
                 if self.state_file.exists():
                     backup = self.state_file.with_suffix(".backup")
                     backup.write_bytes(self.state_file.read_bytes())
+
                     # Register rollback to restore from backup
-                    tx.add_rollback(lambda: backup.replace(self.state_file))
+                    def restore_backup() -> None:
+                        backup.replace(self.state_file)
+
+                    tx.add_rollback(restore_backup)
 
                 # Atomic write: temp file + rename
                 temp_file = self.state_file.with_suffix(".tmp")

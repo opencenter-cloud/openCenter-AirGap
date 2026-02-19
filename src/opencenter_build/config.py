@@ -267,7 +267,7 @@ class BuildConfig:
             raise ConfigError(f"Missing required fields in {path}: {', '.join(missing_fields)}")
 
         # Build kwargs for dataclass
-        config_kwargs = {
+        config_kwargs: dict[str, Any] = {
             field_name: raw_config[env_key] for env_key, field_name in required_fields.items()
         }
 
