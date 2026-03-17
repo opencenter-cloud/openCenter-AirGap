@@ -1,4 +1,12 @@
-**doc_type: how-to**
+---
+id: migrate-to-simplified-workflow
+title: "Migrate to Simplified Workflow"
+sidebar_label: Simplified Workflow
+description: Migrate from manual components.yaml management to the versions.env single-source-of-truth workflow.
+doc_type: how-to
+audience: "platform engineers"
+tags: [migration, workflow, components, versions-env]
+---
 
 # Migrate to Simplified Workflow
 

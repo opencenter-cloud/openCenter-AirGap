@@ -1,6 +1,12 @@
-**doc_type: tutorial**
-**audience: Platform Engineers, Field Operators**
-**duration: 60 minutes**
+---
+id: first-deployment
+title: "First Deployment"
+sidebar_label: First Deployment
+description: Build and deploy your first air-gapped Kubernetes cluster from scratch using Zarf.
+doc_type: tutorial
+audience: "platform engineers, field operators"
+tags: [tutorial, deployment, zarf, kubernetes, air-gap]
+---
 
 # First Deployment
 

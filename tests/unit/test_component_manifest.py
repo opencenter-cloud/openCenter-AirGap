@@ -251,7 +251,7 @@ KUBERNETES_VERSION=v1.34.3
 HELM_VERSION=v4.0.5
 K9S_VERSION=v0.50.9
 KUBESPRAY_VERSION=master
-OPENCENTER_GITOPS_BASE_REPO=https://github.com/rackerlabs/openCenter-gitops-base
+OPENCENTER_GITOPS_BASE_REPO=https://github.com/opencenter-cloud/openCenter-gitops-base
 OPENCENTER_GITOPS_BASE_VERSION=main
 CERT_MANAGER_VERSION=v1.16.2
 """
@@ -511,7 +511,7 @@ class TestExtractReposFromVersions:
     def test_extracts_opencenter_gitops_repo(self):
         """Test extracting openCenter GitOps repository."""
         versions = {
-            "OPENCENTER_GITOPS_BASE_REPO": "https://github.com/rackerlabs/openCenter-gitops-base",
+            "OPENCENTER_GITOPS_BASE_REPO": "https://github.com/opencenter-cloud/openCenter-gitops-base",
             "OPENCENTER_GITOPS_BASE_VERSION": "v1.0.0",
         }
 
@@ -519,14 +519,14 @@ class TestExtractReposFromVersions:
 
         assert len(repos) == 1
         assert repos[0].name == "openCenter-gitops-base"
-        assert repos[0].url == "https://github.com/rackerlabs/openCenter-gitops-base"
+        assert repos[0].url == "https://github.com/opencenter-cloud/openCenter-gitops-base"
         assert repos[0].ref == "v1.0.0"
 
     def test_extracts_multiple_repos(self):
         """Test extracting multiple repositories."""
         versions = {
             "KUBESPRAY_VERSION": "v2.24.0",
-            "OPENCENTER_GITOPS_BASE_REPO": "https://github.com/rackerlabs/openCenter-gitops-base",
+            "OPENCENTER_GITOPS_BASE_REPO": "https://github.com/opencenter-cloud/openCenter-gitops-base",
             "OPENCENTER_GITOPS_BASE_VERSION": "v1.0.0",
         }
 
@@ -541,7 +541,7 @@ class TestExtractReposFromVersions:
     def test_handles_missing_kubespray_version(self):
         """Test handling missing KUBESPRAY_VERSION."""
         versions = {
-            "OPENCENTER_GITOPS_BASE_REPO": "https://github.com/rackerlabs/openCenter-gitops-base",
+            "OPENCENTER_GITOPS_BASE_REPO": "https://github.com/opencenter-cloud/openCenter-gitops-base",
             "OPENCENTER_GITOPS_BASE_VERSION": "v1.0.0",
         }
 
@@ -572,7 +572,7 @@ class TestExtractReposFromVersions:
     def test_defaults_to_main_when_version_missing(self):
         """Test that missing OPENCENTER_GITOPS_BASE_VERSION defaults to 'main'."""
         versions = {
-            "OPENCENTER_GITOPS_BASE_REPO": "https://github.com/rackerlabs/openCenter-gitops-base",
+            "OPENCENTER_GITOPS_BASE_REPO": "https://github.com/opencenter-cloud/openCenter-gitops-base",
         }
 
         repos = extract_repos_from_versions(versions)

@@ -1,3 +1,13 @@
+---
+id: documentation-delivery
+title: "Documentation Delivery Summary"
+sidebar_label: Delivery Summary
+description: Summary of documentation created for openCenter AirGap following the Diátaxis framework.
+doc_type: reference
+audience: "contributors, platform engineers"
+tags: [documentation, delivery, diataxis, status]
+---
+
 # Documentation Delivery Summary
 
 This document summarizes the documentation created for the openCenter-AirGap repository following the Diátaxis framework.

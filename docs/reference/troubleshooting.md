@@ -1,4 +1,12 @@
-**doc_type: reference**
+---
+id: troubleshooting
+title: "Troubleshooting"
+sidebar_label: Troubleshooting
+description: Common errors and solutions for build, deploy, and verification phases.
+doc_type: reference
+audience: "platform engineers, field operators"
+tags: [troubleshooting, errors, debugging, recovery]
+---
 
 # Troubleshooting
 

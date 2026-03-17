@@ -42,7 +42,7 @@ version_strategy = st.one_of(
 )
 
 url_strategy = st.one_of(
-    st.just("https://github.com/rackerlabs/opencenter-gitops-base"),
+    st.just("https://github.com/opencenter-cloud/opencenter-gitops-base"),
     st.just("https://github.com/kubernetes-sigs/kubespray"),
     st.just("ghcr.io/opencenter-cloud"),
     st.just("docker.io/library"),

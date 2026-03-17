@@ -33,7 +33,7 @@ def sample_config():
         keycloak_version="21.1.1",
         prometheus_version="v2.48.0",
         grafana_version="10.2.0",
-        opencenter_gitops_base_repo="https://github.com/rackerlabs/openCenter-gitops-base",
+        opencenter_gitops_base_repo="https://github.com/opencenter-cloud/openCenter-gitops-base",
         opencenter_gitops_base_version="v1.0.0",
         opencenter_gitops_base_commit_sha="1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
         opencenter_container_registry="ghcr.io/opencenter-cloud",

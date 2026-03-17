@@ -1,3 +1,13 @@
+---
+id: docs-home
+title: "openCenter AirGap Documentation"
+sidebar_label: Documentation Home
+description: Main documentation hub for openCenter AirGap, organized by the Diátaxis framework.
+doc_type: reference
+audience: "platform engineers, field operators, security officers, contributors"
+tags: [documentation, index, getting-started]
+---
+
 # openCenter AirGap Documentation
 
 Welcome to the openCenter AirGap documentation. This documentation follows the [Diátaxis framework](https://diataxis.fr/), organizing content by purpose: learning, task completion, reference lookup, and understanding.

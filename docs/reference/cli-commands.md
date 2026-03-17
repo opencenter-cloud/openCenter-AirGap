@@ -1,4 +1,12 @@
-**doc_type: reference**
+---
+id: cli-commands
+title: "CLI Commands"
+sidebar_label: CLI Commands
+description: Complete reference for the opencenter-build command-line interface with all commands, options, and examples.
+doc_type: reference
+audience: "platform engineers"
+tags: [cli, commands, reference, opencenter-build]
+---
 
 # CLI Commands
 
@@ -368,7 +376,7 @@ opencenter-build scan --repos --no-update-manifest
 ```
 Cloning repositories...
   ✓ kubespray (https://github.com/kubernetes-sigs/kubespray.git)
-  ✓ opencenter-gitops-base (https://github.com/rackerlabs/openCenter-gitops-base.git)
+  ✓ opencenter-gitops-base (https://github.com/opencenter-cloud/openCenter-gitops-base.git)
 
 Scanning for images...
   Found 247 images

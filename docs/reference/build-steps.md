@@ -1,4 +1,12 @@
-**doc_type: reference**
+---
+id: build-steps
+title: "Build Steps"
+sidebar_label: Build Steps
+description: Detailed breakdown of the seven build phases and their operations, outputs, and failure modes.
+doc_type: reference
+audience: "platform engineers"
+tags: [build, phases, pipeline, zarf, packaging]
+---
 
 # Build Steps
 

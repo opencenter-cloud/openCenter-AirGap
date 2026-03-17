@@ -1,3 +1,13 @@
+---
+id: docs-navigation
+title: "Documentation Navigation"
+sidebar_label: Navigation
+description: Quick navigation guide for openCenter AirGap documentation organized by type, role, and workflow.
+doc_type: reference
+audience: "platform engineers, field operators, security officers, contributors"
+tags: [navigation, index, documentation]
+---
+
 # Documentation Navigation
 
 Quick navigation for openCenter AirGap documentation.

@@ -58,7 +58,7 @@ def build_config_strategy(draw):
         keycloak_version=keycloak_version,
         prometheus_version=prometheus_version,
         grafana_version=grafana_version,
-        opencenter_gitops_base_repo="https://github.com/rackerlabs/openCenter-gitops-base",
+        opencenter_gitops_base_repo="https://github.com/opencenter-cloud/openCenter-gitops-base",
         opencenter_gitops_base_version=gitops_version,
         opencenter_gitops_base_commit_sha=gitops_sha,
         opencenter_container_registry="ghcr.io/opencenter-cloud",

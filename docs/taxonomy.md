@@ -1,4 +1,12 @@
+---
+id: documentation-taxonomy
+title: "Documentation Taxonomy"
+sidebar_label: Taxonomy
+description: Diátaxis-based organization and navigation index for openCenter AirGap documentation.
 doc_type: reference
+audience: "platform engineers, field operators, contributors"
+tags: [documentation, diataxis, navigation, taxonomy]
+---
 
 # Documentation Taxonomy
 

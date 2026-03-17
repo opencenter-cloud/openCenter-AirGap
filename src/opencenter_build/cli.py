@@ -177,7 +177,7 @@ PROMETHEUS_VERSION="v3.0.1"
 GRAFANA_VERSION="11.4.0"
 
 # openCenter GitOps
-OPENCENTER_GITOPS_BASE_REPO="https://github.com/rackerlabs/openCenter-gitops-base"
+OPENCENTER_GITOPS_BASE_REPO="https://github.com/opencenter-cloud/openCenter-gitops-base"
 OPENCENTER_GITOPS_BASE_VERSION="main"
 OPENCENTER_GITOPS_BASE_COMMIT_SHA="HEAD"
 

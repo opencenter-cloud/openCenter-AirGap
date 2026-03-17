@@ -1,3 +1,13 @@
+---
+id: doc-map
+title: "Documentation Map"
+sidebar_label: Doc Map
+description: Complete inventory of openCenter AirGap documentation with evidence links and gap analysis.
+doc_type: reference
+audience: "contributors, platform engineers"
+tags: [documentation, inventory, diataxis, maintenance]
+---
+
 # Documentation Map
 
 This document provides a complete inventory of openCenter-AirGap documentation, organized by the Diátaxis framework.

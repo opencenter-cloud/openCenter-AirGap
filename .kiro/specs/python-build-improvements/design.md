@@ -139,7 +139,7 @@ tools:
 # Git repositories
 repositories:
   - name: opencenter-gitops-base
-    url: "https://github.com/rackerlabs/opencenter-gitops-base.git"
+    url: "https://github.com/opencenter-cloud/opencenter-gitops-base.git"
     ref: "v1.0.0"
 
   - name: kubespray

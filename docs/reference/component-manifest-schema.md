@@ -1,4 +1,12 @@
-**doc_type: reference**
+---
+id: component-manifest-schema
+title: "Component Manifest Schema"
+sidebar_label: Manifest Schema
+description: JSON schema and field reference for components.yaml that defines what gets packaged.
+doc_type: reference
+audience: "platform engineers"
+tags: [schema, components, manifest, yaml, validation]
+---
 
 # Component Manifest Schema
 

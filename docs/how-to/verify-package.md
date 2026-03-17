@@ -1,5 +1,12 @@
-**doc_type: how-to**
-**audience: Security Officers, Platform Engineers**
+---
+id: verify-package
+title: "Verify Package Integrity"
+sidebar_label: Verify Package
+description: Check that a Zarf package has not been tampered with and contains expected components.
+doc_type: how-to
+audience: "security officers, platform engineers"
+tags: [verification, checksum, signature, sbom, security]
+---
 
 # Verify Package Integrity
 
