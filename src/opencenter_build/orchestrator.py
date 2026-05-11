@@ -104,6 +104,7 @@ class BuildOrchestrator:
             "generate_kubespray_lists",
             "mirror_terraform_providers",
             "organize_assets",
+            "generate_zarf_yaml",
             "create_zarf_package",
             "generate_manifest",
         ]

@@ -1144,6 +1144,18 @@ def build(
             console.print(f"  [green]✓[/green] Organized {asset_count} asset files")
             return {"assets": str(assets_dir), "count": str(asset_count)}
 
+        def generate_zarf_yaml() -> dict[str, str]:
+            """Generate zarf.yaml from build configuration."""
+            console.print("  [cyan]Generating zarf.yaml...[/cyan]")
+            from opencenter_build.zarf_generator import ZarfGenerator
+
+            zarf_config = BuildConfig.from_env_file(Path("config/versions.env"))
+            generator = ZarfGenerator(zarf_config)
+            output_path = Path("zarf.yaml")
+            generator.generate(output_path)
+            console.print(f"  [green]✓[/green] Generated {output_path}")
+            return {"output": str(output_path), "status": "generated"}
+
         def create_zarf_package() -> dict[str, str]:
             """Create Zarf package."""
             console.print("  [cyan]Creating Zarf package...[/cyan]")
@@ -1254,6 +1266,7 @@ def build(
         orchestrator.register_step_handler("generate_kubespray_lists", generate_kubespray_lists)
         orchestrator.register_step_handler("mirror_terraform_providers", mirror_terraform_providers)
         orchestrator.register_step_handler("organize_assets", organize_assets)
+        orchestrator.register_step_handler("generate_zarf_yaml", generate_zarf_yaml)
         orchestrator.register_step_handler("create_zarf_package", create_zarf_package)
         orchestrator.register_step_handler("generate_manifest", generate_manifest)
 
