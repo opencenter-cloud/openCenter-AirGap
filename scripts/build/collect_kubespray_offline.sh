@@ -175,6 +175,32 @@ generate_summary() {
     fi
 }
 
+# Generate provenance records for kubespray-offline artifacts
+generate_provenance() {
+    log_info "Generating provenance records for kubespray-offline artifacts..."
+
+    # Use Python provenance reconstruction module
+    if command -v python3 &> /dev/null; then
+        python3 -c "
+import sys
+sys.path.insert(0, '${PROJECT_ROOT}/src')
+from opencenter_build.provenance_kubespray import generate_kubespray_provenance
+from opencenter_build.config import parse_versions_env
+from pathlib import Path
+
+versions_env = parse_versions_env(Path('${PROJECT_ROOT}/config/versions.env'))
+output = generate_kubespray_provenance(
+    kubespray_offline_dir=Path('${KUBESPRAY_OFFLINE_DIR}'),
+    provenance_dir=Path('${PROJECT_ROOT}/build/provenance'),
+    versions_env=versions_env,
+)
+print(f'Provenance written to: {output}')
+" && log_info "Provenance generation complete" || log_warn "Provenance generation failed (non-fatal)"
+    else
+        log_warn "python3 not available, skipping provenance generation"
+    fi
+}
+
 # Main execution
 main() {
     log_info "Starting kubespray-offline collection..."
@@ -195,6 +221,7 @@ main() {
     fi
     
     generate_summary
+    generate_provenance
     
     # Create completion marker on success
     create_completion_marker

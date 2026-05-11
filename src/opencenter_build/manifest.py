@@ -2,6 +2,10 @@
 
 This module provides data models and generation logic for creating comprehensive
 artifact inventories with checksums and metadata.
+
+Each artifact entry includes a source_url field populated from the provenance
+log (build/provenance/downloads.ndjson), linking every collected artifact back
+to its exact download source.
 """
 
 import hashlib
@@ -149,6 +153,10 @@ class ManifestGenerator:
 
     Scans build output directories to inventory all collected artifacts,
     calculate checksums, and export manifests in JSON and Markdown formats.
+
+    When a provenance log exists (build/provenance/downloads.ndjson), each
+    artifact entry is enriched with a source_url field linking it back to
+    the exact URL from which it was downloaded.
     """
 
     def __init__(self, build_dir: Path):
@@ -158,6 +166,87 @@ class ManifestGenerator:
             build_dir: Root build directory containing artifacts
         """
         self.build_dir = Path(build_dir)
+        self._provenance_index: dict[str, str] | None = None
+
+    @property
+    def provenance_index(self) -> dict[str, str]:
+        """Lazy-loaded index mapping sha256 → source_url from provenance log.
+
+        Returns:
+            Dictionary mapping SHA256 checksums to source URLs
+        """
+        if self._provenance_index is None:
+            self._provenance_index = self._load_provenance_index()
+        return self._provenance_index
+
+    def _load_provenance_index(self) -> dict[str, str]:
+        """Load provenance log and build lookup indexes.
+
+        Builds two indexes:
+        - sha256 → url (primary)
+        - artifact_name → url (fallback)
+
+        Returns:
+            Merged index mapping identifiers to source URLs
+        """
+        index: dict[str, str] = {}
+        provenance_file = self.build_dir / "provenance" / "downloads.ndjson"
+
+        if not provenance_file.exists():
+            return index
+
+        try:
+            with open(provenance_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    record = json.loads(line)
+                    if not record.get("success", False):
+                        continue
+                    url = record.get("url", "")
+                    if not url:
+                        continue
+                    # Index by sha256
+                    sha256 = record.get("sha256", "")
+                    if sha256:
+                        index[sha256] = url
+                    # Index by artifact name
+                    artifact = record.get("artifact", "")
+                    if artifact:
+                        index[f"name:{artifact}"] = url
+                    # Index by dest path basename
+                    dest = record.get("dest_path", "") or record.get("dest", "")
+                    if dest:
+                        index[f"path:{Path(dest).name}"] = url
+        except (json.JSONDecodeError, OSError):
+            pass
+
+        return index
+
+    def _lookup_source_url(self, sha256: str = "", name: str = "", path_name: str = "") -> str:
+        """Look up source URL from provenance index.
+
+        Tries sha256 first, then artifact name, then path basename.
+
+        Args:
+            sha256: SHA256 checksum of the artifact
+            name: Artifact name
+            path_name: Basename of the file path
+
+        Returns:
+            Source URL if found, empty string otherwise
+        """
+        idx = self.provenance_index
+
+        if sha256 and sha256 in idx:
+            return idx[sha256]
+        if name and f"name:{name}" in idx:
+            return idx[f"name:{name}"]
+        if path_name and f"path:{path_name}" in idx:
+            return idx[f"path:{path_name}"]
+
+        return ""
 
     def generate(self, build_id: str | None = None) -> ArtifactManifest:
         """Generate complete artifact manifest from build directory.
@@ -218,11 +307,15 @@ class ManifestGenerator:
             return
 
         for chart_file in charts_dir.glob("*.tgz"):
+            sha256 = self._calculate_sha256(chart_file)
             chart_info = {
                 "name": chart_file.stem,
                 "path": str(chart_file.relative_to(self.build_dir)),
                 "size": chart_file.stat().st_size,
-                "sha256": self._calculate_sha256(chart_file),
+                "sha256": sha256,
+                "source_url": self._lookup_source_url(
+                    sha256=sha256, name=chart_file.stem, path_name=chart_file.name
+                ),
             }
             manifest.charts.append(chart_info)
 
@@ -255,11 +348,15 @@ class ManifestGenerator:
         for binary_file in files_dir.rglob("*"):
             if binary_file.is_file():
                 size = binary_file.stat().st_size
+                sha256 = self._calculate_sha256(binary_file)
                 binary_info = {
                     "name": binary_file.name,
                     "path": str(binary_file.relative_to(self.build_dir)),
                     "size": size,
-                    "sha256": self._calculate_sha256(binary_file),
+                    "sha256": sha256,
+                    "source_url": self._lookup_source_url(
+                        sha256=sha256, name=binary_file.name, path_name=binary_file.name
+                    ),
                 }
                 manifest.binaries.append(binary_info)
                 total_size += size
@@ -280,11 +377,15 @@ class ManifestGenerator:
         total_size = 0
         for deb_file in debs_dir.rglob("*.deb"):
             size = deb_file.stat().st_size
+            sha256 = self._calculate_sha256(deb_file)
             pkg_info = {
                 "name": deb_file.name,
                 "path": str(deb_file.relative_to(self.build_dir)),
                 "size": size,
-                "sha256": self._calculate_sha256(deb_file),
+                "sha256": sha256,
+                "source_url": self._lookup_source_url(
+                    sha256=sha256, name=deb_file.name, path_name=deb_file.name
+                ),
             }
             manifest.os_packages.append(pkg_info)
             total_size += size
@@ -306,12 +407,16 @@ class ManifestGenerator:
         for pkg_file in pypi_dir.rglob("*"):
             if pkg_file.is_file() and (pkg_file.suffix in [".whl", ".tar.gz", ".zip"]):
                 size = pkg_file.stat().st_size
+                sha256 = self._calculate_sha256(pkg_file)
                 pkg_info = {
                     "name": pkg_file.name,
                     "type": "wheel" if pkg_file.suffix == ".whl" else "source",
                     "path": str(pkg_file.relative_to(self.build_dir)),
                     "size": size,
-                    "sha256": self._calculate_sha256(pkg_file),
+                    "sha256": sha256,
+                    "source_url": self._lookup_source_url(
+                        sha256=sha256, name=pkg_file.name, path_name=pkg_file.name
+                    ),
                 }
                 manifest.pypi_packages.append(pkg_info)
                 total_size += size
@@ -330,11 +435,15 @@ class ManifestGenerator:
             return
 
         for provider_file in tf_dir.rglob("*.zip"):
+            sha256 = self._calculate_sha256(provider_file)
             provider_info = {
                 "name": provider_file.stem,
                 "path": str(provider_file.relative_to(self.build_dir)),
                 "size": provider_file.stat().st_size,
-                "sha256": self._calculate_sha256(provider_file),
+                "sha256": sha256,
+                "source_url": self._lookup_source_url(
+                    sha256=sha256, name=provider_file.stem, path_name=provider_file.name
+                ),
             }
             manifest.terraform_providers.append(provider_info)
 

@@ -8,10 +8,17 @@ set -euo pipefail
 # - helm: Chart deployment
 # - stern: Multi-pod log tailing
 # - kubectx/kubens: Context switching
+#
+# All downloads are recorded in build/provenance/downloads.ndjson
+# via the shared download library.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TOOLS_DIR="${PROJECT_ROOT}/assets/operator-tools"
+
+# Source shared download library (provenance tracking)
+# shellcheck disable=SC1091
+source "${PROJECT_ROOT}/scripts/lib/download.sh"
 
 # Source versions
 if [ -f "${PROJECT_ROOT}/config/versions.env" ]; then
@@ -45,14 +52,17 @@ log_step() {
     echo -e "${CYAN}[STEP]${NC} $*"
 }
 
-# Create tools directory
+# Create tools directory and initialize provenance
 mkdir -p "${TOOLS_DIR}"
+export PROVENANCE_DIR="${PROJECT_ROOT}/build/provenance"
+export PROVENANCE_FILE="${PROVENANCE_DIR}/downloads.ndjson"
+init_provenance
 
 download_k9s() {
     log_step "Downloading k9s ${K9S_VERSION}..."
     local url="https://github.com/derailed/k9s/releases/download/${K9S_VERSION}/k9s_Linux_${ARCH}.tar.gz"
 
-    if curl -fsSL "${url}" | tar xz -C "${TOOLS_DIR}" k9s; then
+    if download_and_extract "${url}" "${TOOLS_DIR}" "k9s" "k9s"; then
         chmod +x "${TOOLS_DIR}/k9s"
         log_info "✓ k9s downloaded"
     else
@@ -65,7 +75,7 @@ download_helm() {
     log_step "Downloading helm ${HELM_VERSION}..."
     local url="https://get.helm.sh/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz"
 
-    if curl -fsSL "${url}" | tar xz -C "${TOOLS_DIR}" --strip-components=1 linux-${ARCH}/helm; then
+    if download_and_extract "${url}" "${TOOLS_DIR}" "--strip-components=1 linux-${ARCH}/helm" "helm"; then
         chmod +x "${TOOLS_DIR}/helm"
         log_info "✓ helm downloaded"
     else
@@ -79,7 +89,7 @@ download_stern() {
     local version_num="${STERN_VERSION#v}"
     local url="https://github.com/stern/stern/releases/download/${STERN_VERSION}/stern_${version_num}_linux_${ARCH}.tar.gz"
 
-    if curl -fsSL "${url}" | tar xz -C "${TOOLS_DIR}" stern; then
+    if download_and_extract "${url}" "${TOOLS_DIR}" "stern" "stern"; then
         chmod +x "${TOOLS_DIR}/stern"
         log_info "✓ stern downloaded"
     else
@@ -92,8 +102,8 @@ download_kubectx() {
     log_step "Downloading kubectx/kubens ${KUBECTX_VERSION}..."
     local base_url="https://github.com/ahmetb/kubectx/releases/download/${KUBECTX_VERSION}"
 
-    if curl -fsSL "${base_url}/kubectx" -o "${TOOLS_DIR}/kubectx" && \
-       curl -fsSL "${base_url}/kubens" -o "${TOOLS_DIR}/kubens"; then
+    if download_artifact "${base_url}/kubectx" "${TOOLS_DIR}/kubectx" "" "kubectx" && \
+       download_artifact "${base_url}/kubens" "${TOOLS_DIR}/kubens" "" "kubens"; then
         chmod +x "${TOOLS_DIR}/kubectx" "${TOOLS_DIR}/kubens"
         log_info "✓ kubectx/kubens downloaded"
     else
@@ -106,6 +116,7 @@ download_kubectx() {
 main() {
     log_info "Collecting operator tools..."
     log_info "Target directory: ${TOOLS_DIR}"
+    log_info "Provenance log: ${PROVENANCE_FILE}"
     echo ""
 
     # Download all tools
@@ -124,7 +135,8 @@ main() {
     # Verify executables
     for tool in k9s helm stern kubectx kubens; do
         if [ -x "${TOOLS_DIR}/${tool}" ]; then
-            local size=$(du -h "${TOOLS_DIR}/${tool}" | cut -f1)
+            local size
+            size=$(du -h "${TOOLS_DIR}/${tool}" | cut -f1)
             log_info "  ✓ ${tool} (${size})"
         else
             log_warn "  ✗ ${tool} missing or not executable"
@@ -133,6 +145,7 @@ main() {
 
     echo ""
     log_info "Collection complete"
+    log_info "Provenance records written to: ${PROVENANCE_FILE}"
 }
 
 main "$@"
