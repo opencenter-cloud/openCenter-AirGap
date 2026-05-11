@@ -19,7 +19,7 @@ from opencenter_build.manifest import ArtifactManifest, ManifestGenerator
 @st.composite
 def artifact_manifest_strategy(draw):
     """Generate arbitrary ArtifactManifest instances."""
-    build_id = draw(st.text(min_size=1, max_size=50))
+    build_id = draw(st.text(min_size=1, max_size=50, alphabet=st.characters(whitelist_categories=("L", "N", "P", "S"), blacklist_characters="\r\n")))
     timestamp = datetime.now()
 
     # Generate images

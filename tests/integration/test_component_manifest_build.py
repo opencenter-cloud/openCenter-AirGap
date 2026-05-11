@@ -23,9 +23,12 @@ import yaml
 
 from opencenter_build.component_manifest import (
     ComponentManifest,
+    KubernetesComponent,
     RepoSpec as RepositorySpec,
     ToolComponent as ToolSpec,
     create_default_manifest,
+    read_manifest,
+    write_manifest,
 )
 
 
@@ -120,7 +123,7 @@ def test_component_manifest_initialization(test_workspace):
 
     # Create default manifest
     manifest = create_default_manifest()
-    manifest.save(manifest_path)
+    write_manifest(manifest, manifest_path)
 
     # Verify file exists
     assert manifest_path.exists(), "Component manifest should be created"
@@ -132,7 +135,7 @@ def test_component_manifest_initialization(test_workspace):
     assert "images" in content
 
     # Verify Kubernetes configuration
-    assert content["kubernetes"]["version"] == "{{KUBERNETES_VERSION}}"
+    assert content["kubernetes"]["version"] == "1.34.3"
     assert len(content["kubernetes"]["binaries"]) >= 3
 
     # Verify default repository
@@ -151,22 +154,20 @@ def test_add_components_to_manifest(test_workspace):
     manifest = ComponentManifest()
 
     # Add tool
-    tool = ToolSpec(
+    manifest.add_tool(
         name="helm",
         version="3.14.0",
         url="https://get.helm.sh/helm-v{{version}}-linux-amd64.tar.gz",
         extract=True,
         binary="linux-amd64/helm",
     )
-    manifest.add_tool(tool)
 
     # Add repository
-    repo = RepositorySpec(
+    manifest.add_repository(
         name="test-repo",
         url="https://github.com/test/repo.git",
         ref="v1.0.0",
     )
-    manifest.add_repository(repo)
 
     # Add image
     manifest.add_image("docker.io/nginx:1.21.0")
@@ -180,7 +181,7 @@ def test_add_components_to_manifest(test_workspace):
     )
 
     # Save manifest
-    manifest.save(manifest_path)
+    write_manifest(manifest, manifest_path)
 
     # Verify saved content
     content = yaml.safe_load(manifest_path.read_text())
@@ -255,7 +256,7 @@ def test_generate_zarf_manifest(test_workspace):
         repo="https://kubernetes.github.io/ingress-nginx",
         version="4.8.3",
     )
-    manifest.save(manifest_path)
+    write_manifest(manifest, manifest_path)
 
     # Load build config
     config = BuildConfig.from_env_file(test_workspace / "config" / "versions.env")
@@ -292,25 +293,23 @@ def test_full_build_with_component_manifest(test_workspace):
 
     # Add test components
     manifest.add_tool(
-        ToolSpec(
-            name="kubectl",
-            version="1.34.3",
-            url="https://dl.k8s.io/v1.34.3/bin/linux/amd64/kubectl",
-        )
+        name="kubectl",
+        version="1.34.3",
+        url="https://dl.k8s.io/v1.34.3/bin/linux/amd64/kubectl",
     )
 
     manifest.add_image("docker.io/nginx:1.21.0")
     manifest.add_image("redis:7.0-alpine")
 
-    manifest.save(manifest_path)
+    write_manifest(manifest, manifest_path)
 
     # Verify manifest saved correctly
     assert manifest_path.exists()
 
     # Load and verify
-    loaded_manifest = ComponentManifest.from_yaml(manifest_path)
+    loaded_manifest = read_manifest(manifest_path)
     assert len(loaded_manifest.tools) >= 1
-    assert len(loaded_manifest.images.get("additional", [])) >= 2
+    assert len(loaded_manifest.images.additional) >= 2
 
     # Generate Zarf manifest
     from opencenter_build.config import BuildConfig
@@ -404,43 +403,39 @@ def test_component_manifest_round_trip(test_workspace):
     # Create manifest with various components
     manifest = ComponentManifest()
 
-    manifest.kubernetes = {
-        "version": "v1.34.3",
-        "binaries": [
+    manifest.kubernetes = KubernetesComponent(
+        version="v1.34.3",
+        binaries=[
             {"name": "kubectl", "url": "https://example.com/kubectl"},
         ],
-    }
+    )
 
     manifest.add_tool(
-        ToolSpec(
-            name="helm",
-            version="3.14.0",
-            url="https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz",
-            extract=True,
-            binary="linux-amd64/helm",
-        )
+        name="helm",
+        version="3.14.0",
+        url="https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz",
+        extract=True,
+        binary="linux-amd64/helm",
     )
 
     manifest.add_repository(
-        RepositorySpec(
-            name="kubespray",
-            url="https://github.com/kubernetes-sigs/kubespray.git",
-            ref="master",
-        )
+        name="kubespray",
+        url="https://github.com/kubernetes-sigs/kubespray.git",
+        ref="master",
     )
 
     manifest.add_image("docker.io/nginx:1.21.0")
     manifest.add_chart("cert-manager", "https://charts.jetstack.io", "v1.13.0")
 
     # Save
-    manifest.save(manifest_path)
+    write_manifest(manifest, manifest_path)
 
     # Load
-    loaded = ComponentManifest.from_yaml(manifest_path)
+    loaded = read_manifest(manifest_path)
 
     # Verify all components preserved
-    assert loaded.kubernetes["version"] == "v1.34.3"
-    assert len(loaded.kubernetes["binaries"]) == 1
+    assert loaded.kubernetes.version == "v1.34.3"
+    assert len(loaded.kubernetes.binaries) == 1
 
     assert len(loaded.tools) == 1
     assert loaded.tools[0].name == "helm"
@@ -449,11 +444,11 @@ def test_component_manifest_round_trip(test_workspace):
     assert len(loaded.repositories) == 1
     assert loaded.repositories[0].name == "kubespray"
 
-    assert len(loaded.images.get("additional", [])) == 1
-    assert "docker.io/nginx:1.21.0" in loaded.images["additional"]
+    assert len(loaded.images.additional) == 1
+    assert "docker.io/nginx:1.21.0" in loaded.images.additional
 
     assert len(loaded.charts) == 1
-    assert loaded.charts[0]["name"] == "cert-manager"
+    assert loaded.charts[0].name == "cert-manager"
 
 
 if __name__ == "__main__":

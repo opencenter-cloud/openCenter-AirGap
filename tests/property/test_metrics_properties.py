@@ -184,7 +184,7 @@ def test_metrics_file_export_property(build_id: str):
         metrics.save(output_dir)
 
         # Verify JSON file exists and is valid
-        json_file = output_dir / "build-metrics.json"
+        json_file = output_dir / "metrics.json"
         assert json_file.exists(), "JSON metrics file must be created"
 
         json_content = json_file.read_text()
@@ -194,7 +194,7 @@ def test_metrics_file_export_property(build_id: str):
         assert json_data["build_id"] == build_id, "JSON metrics must contain correct build_id"
 
         # Verify Prometheus file exists and contains metrics
-        prom_file = output_dir / "build-metrics.prom"
+        prom_file = output_dir / "metrics.prom"
         assert prom_file.exists(), "Prometheus metrics file must be created"
 
         prom_content = prom_file.read_text()

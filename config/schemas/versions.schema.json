@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "KUBERNETES_VERSION",
+    "TERRAFORM_VERSION",
+    "KUBESPRAY_VERSION",
+    "UBUNTU_VERSION",
+    "CONTAINER_RUNTIME",
+    "CNI_PLUGIN"
+  ],
+  "properties": {
+    "KUBERNETES_VERSION": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "TERRAFORM_VERSION": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "KUBESPRAY_VERSION": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "KUBESPRAY_COMMIT_SHA": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "OPENCENTER_GITOPS_BASE_COMMIT_SHA": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "UBUNTU_VERSION": {
+      "type": "string"
+    },
+    "CONTAINER_RUNTIME": {
+      "type": "string",
+      "enum": ["containerd", "crio"]
+    },
+    "CNI_PLUGIN": {
+      "type": "string",
+      "enum": ["calico", "cilium", "flannel"]
+    },
+    "FLUXCD_VERSION": {
+      "type": "string"
+    },
+    "GITEA_VERSION": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

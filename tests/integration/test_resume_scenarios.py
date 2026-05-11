@@ -115,6 +115,7 @@ def generate_checksums_worker(project_root: Path) -> bool:
     bash_scripts = [
         "scripts/build/collect_opencenter_assets.sh",
         "scripts/build/collect_kubespray_offline.sh",
+        "scripts/build/generate_image_lists.sh",
         "scripts/build/organize_assets_for_zarf.sh",
         "scripts/build/create_zarf_package.sh",
         "scripts/build/sign_package.sh",

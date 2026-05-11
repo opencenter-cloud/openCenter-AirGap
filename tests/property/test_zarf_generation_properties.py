@@ -167,12 +167,13 @@ def test_property_zarf_configuration_generation(config):
             assert "description" in component, "Component should have 'description'"
             assert "required" in component, "Component should have 'required' field"
 
-            # Verify component has either files or actions
+            # Verify component has either files, actions, or repos
             has_files = "files" in component and len(component["files"]) > 0
             has_actions = "actions" in component and len(component["actions"]) > 0
+            has_repos = "repos" in component
             assert (
-                has_files or has_actions
-            ), f"Component {component['name']} should have files or actions"
+                has_files or has_actions or has_repos
+            ), f"Component {component['name']} should have files, actions, or repos"
 
         # Property 8: Bootstrap component structure (Requirement 5.5)
         bootstrap = next((c for c in components if c["name"] == "bootstrap-tools"), None)

@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "auth_url",
+    "project_name",
+    "username",
+    "password",
+    "region",
+    "control_plane_count",
+    "worker_count",
+    "flavor",
+    "image",
+    "network",
+    "key_pair"
+  ],
+  "properties": {
+    "auth_url": {
+      "type": "string",
+      "pattern": "^https?://"
+    },
+    "project_name": {
+      "type": "string"
+    },
+    "username": {
+      "type": "string"
+    },
+    "password": {
+      "type": "string"
+    },
+    "region": {
+      "type": "string"
+    },
+    "control_plane_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "worker_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "flavor": {
+      "type": "string"
+    },
+    "image": {
+      "type": "string"
+    },
+    "network": {
+      "type": "string"
+    },
+    "key_pair": {
+      "type": "string"
+    },
+    "floating_ip_pool": {
+      "type": "string"
+    },
+    "volume_size": {
+      "type": "integer",
+      "minimum": 20
+    }
+  },
+  "additionalProperties": true
+}
