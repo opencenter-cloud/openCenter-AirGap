@@ -23,7 +23,7 @@ Build and deploy an air-gapped Kubernetes cluster from scratch. You'll create a 
 **Zone A (Build Host)**:
 - Ubuntu 24.04 with internet access
 - 100GB free disk space
-- Python 3.10+, Git installed
+- Python 3.12+, Git installed
 - Zarf CLI installed: `curl -sL https://get.zarf.dev | bash`
 
 **Zone C (Target Environment)**:

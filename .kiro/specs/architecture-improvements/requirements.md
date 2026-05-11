@@ -251,7 +251,7 @@
 ## Dependencies
 
 ### External
-- Python 3.10+
+- Python 3.12+
 - Skopeo (container image operations)
 - Podman (container runtime)
 - GitHub Actions

@@ -63,7 +63,7 @@ def build_config_strategy(draw):
         opencenter_gitops_base_commit_sha=gitops_sha,
         opencenter_container_registry="ghcr.io/opencenter-cloud",
         target_arch="amd64",
-        python_version="3.10",
+        python_version="3.12",
         repos=[],
         max_workers=4,
         output_dir=Path("dist"),

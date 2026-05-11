@@ -235,7 +235,7 @@ The system operates across three distinct security zones:
 - **Maintainability**: Clear module boundaries and interfaces
 
 **Trade-offs**:
-- **Runtime dependency**: Requires Python 3.10+
+- **Runtime dependency**: Requires Python 3.12+
 - **Startup time**: Slower than Bash for simple scripts
 - **Deployment**: More complex than single Bash script
 

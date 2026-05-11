@@ -38,7 +38,7 @@ def sample_config():
         opencenter_gitops_base_commit_sha="1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
         opencenter_container_registry="ghcr.io/opencenter-cloud",
         target_arch="amd64",
-        python_version="3.10",
+        python_version="3.12",
         repos=[],
         max_workers=4,
         output_dir=Path("dist"),

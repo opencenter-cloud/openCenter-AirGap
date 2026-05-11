@@ -239,7 +239,7 @@ All file paths relative to repository root:
 ### Technology Stack Identified
 
 **Build System**:
-- Python 3.10+ (primary language)
+- Python 3.12+ (primary language)
 - Typer (CLI framework)
 - Rich (terminal UI)
 - PyYAML (configuration parsing)

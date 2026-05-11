@@ -23,8 +23,8 @@ import yaml
 
 from opencenter_build.component_manifest import (
     ComponentManifest,
-    RepositorySpec,
-    ToolSpec,
+    RepoSpec as RepositorySpec,
+    ToolComponent as ToolSpec,
     create_default_manifest,
 )
 

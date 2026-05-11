@@ -117,7 +117,7 @@ opencenter-airgap/
 [project]
 name = "opencenter-build"
 version = "1.0.0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]

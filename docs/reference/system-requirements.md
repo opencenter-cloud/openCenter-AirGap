@@ -41,7 +41,7 @@ The build host is a connected machine that downloads dependencies and creates th
 ### Software Dependencies
 
 **Required**:
-- Python 3.10 or later (`pyproject.toml:requires-python = ">=3.10"`)
+- Python 3.12 or later (`pyproject.toml:requires-python = ">=3.12"`)
 - Git 2.30 or later
 - pip (Python package manager)
 
@@ -231,7 +231,7 @@ Individual Kubernetes cluster nodes (control plane and workers).
 ### Software Dependencies
 
 **Pre-installed** (before Kubespray):
-- Python 3.10+ (for Ansible)
+- Python 3.12+ (for Ansible)
 - SSH server (for Ansible connectivity)
 
 **Installed by Kubespray**:
@@ -284,11 +284,11 @@ Individual Kubernetes cluster nodes (control plane and workers).
 ### Python Versions
 
 **Supported**:
-- Python 3.10 (minimum)
+- Python 3.12 (minimum)
 - Python 3.11 (tested)
 - Python 3.12 (tested)
 
-**Evidence**: `pyproject.toml:requires-python = ">=3.10"`, `pyproject.toml:classifiers`
+**Evidence**: `pyproject.toml:requires-python = ">=3.12"`, `pyproject.toml:classifiers`
 
 ### Terraform Versions
 
@@ -432,7 +432,7 @@ echo $HTTPS_PROXY
 
 ### Python Version Mismatch
 
-**Symptom**: "Python 3.10 or later required"
+**Symptom**: "Python 3.12 or later required"
 
 **Solution**: Install correct Python version
 
@@ -440,9 +440,9 @@ echo $HTTPS_PROXY
 # Check Python version
 python3 --version
 
-# Install Python 3.10+ (Ubuntu)
+# Install Python 3.12+ (Ubuntu)
 sudo apt update
-sudo apt install python3.10 python3.10-venv python3-pip
+sudo apt install python3.12 python3.12-venv python3-pip
 ```
 
 ## See Also

@@ -34,7 +34,7 @@ The output is a single `.tar.zst` file with an SBOM and cryptographic signature.
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - Git
 - 100GB+ free disk space
 - Internet access (Zone A only)
@@ -259,7 +259,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 - Ubuntu 24.04 (or compatible Linux)
 - 100GB+ free disk space
 - Internet access
-- Python 3.10+
+- Python 3.12+
 - Git 2.30+
 - Optional: Zarf CLI (for package creation)
 

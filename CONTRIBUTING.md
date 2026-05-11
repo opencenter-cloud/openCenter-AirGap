@@ -11,7 +11,7 @@ This guide covers setting up your development environment, running tests, and su
 **Operating System**: Ubuntu 24.04 LTS (or compatible Linux distribution)
 
 **Required Tools**:
-- Python 3.10 or later
+- Python 3.12 or later
 - Git 2.30+
 - Podman or Docker
 - 100GB+ free disk space

@@ -28,7 +28,7 @@ This document provides a complete inventory of openCenter-AirGap documentation, 
 
 | Document | Purpose | Prerequisites | Evidence |
 |----------|---------|---------------|----------|
-| [First Deployment](tutorials/01-first-deployment.md) | Build and deploy first air-gap cluster | Ubuntu 24.04, 100GB disk, Python 3.10+ | `src/opencenter_build/cli.py:build()`, `zarf.yaml` |
+| [First Deployment](tutorials/01-first-deployment.md) | Build and deploy first air-gap cluster | Ubuntu 24.04, 100GB disk, Python 3.12+ | `src/opencenter_build/cli.py:build()`, `zarf.yaml` |
 | [OpenStack Deployment](tutorials/02-openstack-deployment.md) | Deploy to OpenStack VMs with Terraform | First deployment completed, OpenStack credentials | `examples/openstack-config.yaml`, `config/versions.env:TERRAFORM_VERSION` |
 | [Custom Component Addition](tutorials/03-custom-component.md) | Add custom Helm chart and images | First deployment completed | `src/opencenter_build/cli.py:add()`, `src/opencenter_build/component_manifest.py` |
 

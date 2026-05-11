@@ -4,7 +4,7 @@
 
 - **Operating System**: Ubuntu Linux 24.04 LTS
 - **Architecture**: AMD64 (x86_64)
-- **Python Version**: 3.10
+- **Python Version**: 3.12
 - **Container Runtime**: runc 1.3.4
 - **CNI Plugin**: Calico
 
